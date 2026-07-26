@@ -1,4 +1,4 @@
-# vocatree
+# Lingustic Cabinet
 
 A new Flutter project.
 
