@@ -1,0 +1,56 @@
+name: vocatree
+description: "VocaTree - Cross-platform English vocabulary notebook"
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.12.2
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+  google_fonts: ^6.1.0
+  
+  # State Management
+  flutter_riverpod: ^2.4.0
+  
+  # Local Database
+  sqflite: ^2.3.0
+  sqflite_common_ffi: ^2.3.0
+  sqflite_common_ffi_web: ^1.1.2
+  path_provider: ^2.1.0
+  path: ^1.8.0
+  
+  # Utilities
+  uuid: ^4.2.0
+  
+  # File Operations
+  share_plus: ^10.0.0
+  file_picker: ^8.0.0
+  # Image processing (resize/compress)
+  image: ^4.0.0
+  # Zip archive handling for export/import
+  archive: ^3.3.7
+  
+  # Markdown rendering
+  flutter_markdown: ^0.7.0
+  
+  # Web
+  web: ^1.1.0
+  flutter_local_notifications: ^22.1.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  flutter_lints: ^6.0.0
+  
+  # Testing
+  mockito: ^5.4.0
+  build_runner: ^2.4.0
+
+flutter:
+  uses-material-design: true
