@@ -335,7 +335,7 @@ class _CabinetBrutalButtonState extends State<CabinetBrutalButton> {
           right: _isPressed ? 0 : 3,
           bottom: _isPressed ? 0 : 3,
         ),
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
         decoration: BoxDecoration(
           color: bgColor,
           borderRadius: BorderRadius.circular(4),
@@ -354,15 +354,20 @@ class _CabinetBrutalButtonState extends State<CabinetBrutalButton> {
           children: [
             if (widget.icon != null) ...[
               Icon(widget.icon, size: 16, color: inkColor),
-              const SizedBox(width: 8),
+              const SizedBox(width: 6),
             ],
-            Text(
-              widget.text.toUpperCase(),
-              style: GoogleFonts.inter(
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                color: inkColor,
-                letterSpacing: 0.8,
+            Flexible(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  widget.text.toUpperCase(),
+                  style: GoogleFonts.inter(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: inkColor,
+                    letterSpacing: 0.5,
+                  ),
+                ),
               ),
             ),
           ],

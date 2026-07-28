@@ -11,6 +11,7 @@ class Word {
   final int difficulty; // 1-5
   final String? memo;
   final String? imagePath;
+  final String? dictionaryUrl;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -24,6 +25,7 @@ class Word {
     this.difficulty = 3,
     this.memo,
     this.imagePath,
+    this.dictionaryUrl,
     DateTime? createdAt,
     DateTime? updatedAt,
   })  : id = id ?? const Uuid().v4(),
@@ -42,6 +44,7 @@ class Word {
       'difficulty': difficulty,
       'memo': memo,
       'image_path': imagePath,
+      'dictionary_url': dictionaryUrl,
       'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt.toIso8601String(),
     };
@@ -60,6 +63,7 @@ class Word {
       difficulty: map['difficulty'] ?? 3,
       memo: map['memo'],
       imagePath: map['image_path'],
+      dictionaryUrl: map['dictionary_url'],
       createdAt: DateTime.parse(map['created_at']),
       updatedAt: DateTime.parse(map['updated_at']),
     );
@@ -74,6 +78,7 @@ class Word {
     int? difficulty,
     String? memo,
     String? imagePath,
+    String? dictionaryUrl,
   }) {
     return Word(
       id: id,
@@ -85,6 +90,7 @@ class Word {
       difficulty: difficulty ?? this.difficulty,
       memo: memo ?? this.memo,
       imagePath: imagePath ?? this.imagePath,
+      dictionaryUrl: dictionaryUrl ?? this.dictionaryUrl,
       createdAt: createdAt,
       updatedAt: DateTime.now(),
     );

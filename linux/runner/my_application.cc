@@ -45,14 +45,24 @@ static void my_application_activate(GApplication* application) {
   if (use_header_bar) {
     GtkHeaderBar* header_bar = GTK_HEADER_BAR(gtk_header_bar_new());
     gtk_widget_show(GTK_WIDGET(header_bar));
-    gtk_header_bar_set_title(header_bar, "vocatree");
+    gtk_header_bar_set_title(header_bar, "Linguistic Cabinet");
     gtk_header_bar_set_show_close_button(header_bar, TRUE);
     gtk_window_set_titlebar(window, GTK_WIDGET(header_bar));
   } else {
-    gtk_window_set_title(window, "vocatree");
+    gtk_window_set_title(window, "Linguistic Cabinet");
   }
 
   gtk_window_set_default_size(window, 1280, 720);
+  g_set_prgname("com.linguistic_cabinet.app");
+  gdk_set_program_class("com.linguistic_cabinet.app");
+  gtk_window_set_icon_name(window, "linguistic_cabinet");
+  
+  GError* icon_error = NULL;
+  GdkPixbuf* icon_pixbuf = gdk_pixbuf_new_from_file("/home/hafuture/.local/share/icons/hicolor/512x512/apps/linguistic_cabinet.png", &icon_error);
+  if (icon_pixbuf != NULL) {
+    gtk_window_set_icon(window, icon_pixbuf);
+    g_object_unref(icon_pixbuf);
+  }
 
   g_autoptr(FlDartProject) project = fl_dart_project_new();
   fl_dart_project_set_dart_entrypoint_arguments(

@@ -79,7 +79,11 @@ class _GridMatchingScreenState extends ConsumerState<GridMatchingScreen> {
           _matchedCount++;
 
           if (_matchedCount == _totalPairs) {
-            _showCompletionDialog();
+            Future.delayed(const Duration(milliseconds: 300), () {
+              if (mounted) {
+                _showCompletionDialog();
+              }
+            });
           }
         } else {
           _firstSelected!.isSelected = false;

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../words/data/models/word.dart';
@@ -22,6 +23,7 @@ class _SpellingTypingScreenState extends ConsumerState<SpellingTypingScreen> {
   late List<Word> _quizWords;
   final TextEditingController _controller = TextEditingController();
   final Stopwatch _stopwatch = Stopwatch();
+  Timer? _nextTimer;
 
   @override
   void initState() {
@@ -35,6 +37,7 @@ class _SpellingTypingScreenState extends ConsumerState<SpellingTypingScreen> {
 
   @override
   void dispose() {
+    _nextTimer?.cancel();
     _controller.dispose();
     _stopwatch.stop();
     super.dispose();
@@ -101,8 +104,9 @@ class _SpellingTypingScreenState extends ConsumerState<SpellingTypingScreen> {
 
     _recordAnswer(isCorrect);
 
-    Future.delayed(const Duration(seconds: 2), () {
-      if (mounted) {
+    _nextTimer?.cancel();
+    _nextTimer = Timer(const Duration(seconds: 2), () {
+      if (mounted && _answered) {
         _nextQuestion();
       }
     });
@@ -118,6 +122,7 @@ class _SpellingTypingScreenState extends ConsumerState<SpellingTypingScreen> {
   }
 
   void _nextQuestion() {
+    _nextTimer?.cancel();
     if (_currentIndex < _quizWords.length - 1) {
       setState(() {
         _currentIndex++;
@@ -300,17 +305,31 @@ class _SpellingTypingScreenState extends ConsumerState<SpellingTypingScreen> {
                 hintText: '정답을 입력하세요',
               ),
               onChanged: (value) {
-                _userInput = value;
+                setState(() {
+                  _userInput = value;
+                });
               },
-              onSubmitted: (_) => _checkAnswer(),
+              onSubmitted: (_) {
+                if (_answered) {
+                  _nextQuestion();
+                } else {
+                  _checkAnswer();
+                }
+              },
               enabled: !_answered,
               autofocus: true,
             ),
             const SizedBox(height: 16),
 
             ElevatedButton(
-              onPressed: _answered ? null : _checkAnswer,
-              child: const Text('확인'),
+              onPressed: _answered
+                  ? _nextQuestion
+                  : (_userInput.trim().isEmpty ? null : _checkAnswer),
+              child: Text(
+                !_answered
+                    ? '확인'
+                    : (_currentIndex < _quizWords.length - 1 ? '다음 문제 ➔' : '결과 보기 🎉'),
+              ),
             ),
 
             if (_answered) ...[

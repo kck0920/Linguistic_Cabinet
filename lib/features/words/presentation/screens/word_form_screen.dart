@@ -4,17 +4,15 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:image/image.dart' as img;
-import 'package:path_provider/path_provider.dart';
-import 'package:uuid/uuid.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
 import '../../data/models/word.dart';
-import '../../data/repositories/word_repository.dart';
 import '../../../review/data/models/review_card.dart';
 import '../../../review/presentation/screens/review_screen.dart';
 import 'word_list_screen.dart';
 import '../../../../core/theme/cabinet_colors.dart';
 import '../../../../core/theme/cabinet_theme.dart';
 import '../../../../shared/widgets/cabinet_widgets.dart';
+import '../../../../core/utils/url_launcher_helper.dart';
 
 class WordFormScreen extends ConsumerStatefulWidget {
   final Word? word;
@@ -33,10 +31,13 @@ class _WordFormScreenState extends ConsumerState<WordFormScreen> {
   late TextEditingController _pronunciationController;
   late TextEditingController _memoController;
   late TextEditingController _tagController;
+  late TextEditingController _dictionaryUrlController;
+
   int _difficulty = 3;
   List<String> _tags = [];
   Uint8List? _imageBytes;
   String? _imagePath;
+  bool _isMarkdownPreview = false;
 
   @override
   void initState() {
@@ -47,11 +48,13 @@ class _WordFormScreenState extends ConsumerState<WordFormScreen> {
     _pronunciationController = TextEditingController(text: widget.word?.pronunciation ?? '');
     _memoController = TextEditingController(text: widget.word?.memo ?? '');
     _tagController = TextEditingController();
+    _dictionaryUrlController = TextEditingController(text: widget.word?.dictionaryUrl ?? '');
+
     _difficulty = widget.word?.difficulty ?? 3;
     _tags = List.from(widget.word?.tags ?? []);
     _imagePath = widget.word?.imagePath;
 
-    if (_imagePath != null) {
+    if (_imagePath != null && _imagePath!.isNotEmpty) {
       if (kIsWeb) {
         try {
           _imageBytes = base64Decode(_imagePath!);
@@ -61,8 +64,15 @@ class _WordFormScreenState extends ConsumerState<WordFormScreen> {
           final file = File(_imagePath!);
           if (file.existsSync()) {
             _imageBytes = file.readAsBytesSync();
+          } else {
+            // Fallback for base64
+            _imageBytes = base64Decode(_imagePath!);
           }
-        } catch (_) {}
+        } catch (_) {
+          try {
+            _imageBytes = base64Decode(_imagePath!);
+          } catch (_) {}
+        }
       }
     }
   }
@@ -75,7 +85,82 @@ class _WordFormScreenState extends ConsumerState<WordFormScreen> {
     _pronunciationController.dispose();
     _memoController.dispose();
     _tagController.dispose();
+    _dictionaryUrlController.dispose();
     super.dispose();
+  }
+
+  Future<void> _pickWebpImage() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['webp'],
+        withData: true,
+      );
+
+      if (result != null && result.files.isNotEmpty) {
+        final file = result.files.first;
+        final extension = file.extension?.toLowerCase();
+
+        if (extension != 'webp') {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('WebP (.webp) 이미지 파일만 사용할 수 있습니다.')),
+            );
+          }
+          return;
+        }
+
+        if (kIsWeb) {
+          if (file.bytes != null) {
+            setState(() {
+              _imageBytes = file.bytes;
+              _imagePath = base64Encode(file.bytes!);
+            });
+          }
+        } else {
+          if (file.bytes != null) {
+            setState(() {
+              _imageBytes = file.bytes;
+              _imagePath = base64Encode(file.bytes!);
+            });
+          } else if (file.path != null) {
+            final f = File(file.path!);
+            final bytes = await f.readAsBytes();
+            setState(() {
+              _imageBytes = bytes;
+              _imagePath = file.path;
+            });
+          }
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('WebP 이미지 선택 실패: $e')),
+        );
+      }
+    }
+  }
+
+  void _removeImage() {
+    setState(() {
+      _imageBytes = null;
+      _imagePath = null;
+    });
+  }
+
+  void _generateNaverUrl() {
+    final eng = _englishController.text.trim();
+    if (eng.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('먼저 English Word를 입력해 주세요.')),
+      );
+      return;
+    }
+    final url = buildNaverDictionaryUrl(eng);
+    setState(() {
+      _dictionaryUrlController.text = url;
+    });
   }
 
   @override
@@ -155,6 +240,47 @@ class _WordFormScreenState extends ConsumerState<WordFormScreen> {
                         ),
                         const SizedBox(height: 16),
 
+                        // Difficulty Selection
+                        _buildLabel('DIFFICULTY (난이도: 1~5)', theme),
+                        Row(
+                          children: List.generate(5, (index) {
+                            final level = index + 1;
+                            final isSelected = _difficulty >= level;
+                            return IconButton(
+                              icon: Icon(
+                                isSelected ? Icons.star : Icons.star_border,
+                                color: isSelected ? colors.accent : colors.ink4,
+                                size: 28,
+                              ),
+                              onPressed: () {
+                                setState(() {
+                                  _difficulty = level;
+                                });
+                              },
+                            );
+                          }),
+                        ),
+                        const SizedBox(height: 16),
+
+                        // Naver Dictionary / URL
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            _buildLabel('DICTIONARY URL (사전 링크)', theme),
+                            TextButton.icon(
+                              onPressed: _generateNaverUrl,
+                              icon: const Icon(Icons.auto_awesome, size: 14),
+                              label: Text('네이버 사전 연동', style: theme.labelMono.copyWith(fontSize: 10)),
+                            ),
+                          ],
+                        ),
+                        TextFormField(
+                          controller: _dictionaryUrlController,
+                          style: theme.labelMono.copyWith(fontSize: 12),
+                          decoration: _buildInputDecoration('e.g. https://endic.naver.com/...', colors, theme),
+                        ),
+                        const SizedBox(height: 16),
+
                         // Pronunciation / IPA
                         _buildLabel('IPA / PRONUNCIATION', theme),
                         TextFormField(
@@ -174,14 +300,114 @@ class _WordFormScreenState extends ConsumerState<WordFormScreen> {
                         ),
                         const SizedBox(height: 16),
 
-                        // Moment Note (Caveat style memo)
-                        _buildLabel('MOMENT NOTE (손글씨 메모)', theme),
-                        TextFormField(
-                          controller: _memoController,
-                          style: theme.handNote.copyWith(fontSize: 19),
-                          maxLines: 3,
-                          decoration: _buildInputDecoration('어디서, 왜 이 단어를 저장했나요?', colors, theme),
+                        // Image Attachment (WebP only)
+                        _buildLabel('IMAGE (WEBP ONLY)', theme),
+                        const SizedBox(height: 4),
+                        if (_imageBytes != null)
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Container(
+                                height: 160,
+                                width: double.infinity,
+                                decoration: BoxDecoration(
+                                  border: Border.all(color: colors.inkLine),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Image.memory(
+                                  _imageBytes!,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (context, error, stackTrace) =>
+                                      Center(child: Text('이미지 로드 실패', style: theme.bodySans)),
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              Row(
+                                children: [
+                                  TextButton.icon(
+                                    onPressed: _removeImage,
+                                    icon: Icon(Icons.delete, color: colors.accent, size: 16),
+                                    label: Text('이미지 삭제', style: theme.labelMono.copyWith(color: colors.accent)),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  TextButton.icon(
+                                    onPressed: _pickWebpImage,
+                                    icon: const Icon(Icons.refresh, size: 16),
+                                    label: Text('다른 WebP 변경', style: theme.labelMono),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          )
+                        else
+                          OutlinedButton.icon(
+                            style: OutlinedButton.styleFrom(
+                              side: BorderSide(color: colors.inkLineStrong),
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                            ),
+                            onPressed: _pickWebpImage,
+                            icon: Icon(Icons.image, color: colors.ink),
+                            label: Text('WebP 이미지 첨부 (.webp)', style: theme.labelMono.copyWith(color: colors.ink)),
+                          ),
+                        const SizedBox(height: 16),
+
+                        // Moment Note (Markdown Support)
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            _buildLabel('MOMENT NOTE (마크다운 메모)', theme),
+                            Row(
+                              children: [
+                                ChoiceChip(
+                                  label: Text('입력', style: theme.labelMono.copyWith(fontSize: 10)),
+                                  selected: !_isMarkdownPreview,
+                                  onSelected: (val) {
+                                    setState(() {
+                                      _isMarkdownPreview = !val;
+                                    });
+                                  },
+                                ),
+                                const SizedBox(width: 6),
+                                ChoiceChip(
+                                  label: Text('마크다운 뷰', style: theme.labelMono.copyWith(fontSize: 10)),
+                                  selected: _isMarkdownPreview,
+                                  onSelected: (val) {
+                                    setState(() {
+                                      _isMarkdownPreview = val;
+                                    });
+                                  },
+                                ),
+                              ],
+                            ),
+                          ],
                         ),
+                        const SizedBox(height: 8),
+                        if (_isMarkdownPreview)
+                          Container(
+                            width: double.infinity,
+                            constraints: const BoxConstraints(minHeight: 100),
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: colors.paper,
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(color: colors.inkLineStrong),
+                            ),
+                            child: _memoController.text.trim().isEmpty
+                                ? Text('작성된 메모가 없습니다.', style: theme.handNote.copyWith(color: colors.ink4))
+                                : MarkdownBody(
+                                    data: _memoController.text,
+                                    styleSheet: MarkdownStyleSheet(
+                                      p: theme.handNote.copyWith(fontSize: 17, color: colors.ink),
+                                    ),
+                                  ),
+                          )
+                        else
+                          TextFormField(
+                            controller: _memoController,
+                            style: theme.handNote.copyWith(fontSize: 19),
+                            maxLines: 4,
+                            decoration: _buildInputDecoration('마크다운(#, **, - 등)으로 자유롭게 적어보세요.', colors, theme),
+                          ),
                         const SizedBox(height: 20),
 
                         // Tag Input
@@ -304,6 +530,8 @@ class _WordFormScreenState extends ConsumerState<WordFormScreen> {
     final repo = ref.read(wordRepositoryProvider);
     final reviewRepo = ref.read(reviewRepositoryProvider);
 
+    final dictUrl = _dictionaryUrlController.text.trim();
+
     if (widget.word != null) {
       final updatedWord = widget.word!.copyWith(
         english: _englishController.text.trim(),
@@ -314,6 +542,7 @@ class _WordFormScreenState extends ConsumerState<WordFormScreen> {
         difficulty: _difficulty,
         memo: _memoController.text.trim(),
         imagePath: _imagePath,
+        dictionaryUrl: dictUrl.isEmpty ? null : dictUrl,
       );
       await repo.updateWord(updatedWord);
     } else {
@@ -326,6 +555,7 @@ class _WordFormScreenState extends ConsumerState<WordFormScreen> {
         difficulty: _difficulty,
         memo: _memoController.text.trim(),
         imagePath: _imagePath,
+        dictionaryUrl: dictUrl.isEmpty ? null : dictUrl,
       );
       await repo.insertWord(newWord);
 

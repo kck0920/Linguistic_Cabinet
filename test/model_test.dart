@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:vocatree/features/words/data/models/word.dart';
-import 'package:vocatree/features/review/data/models/review_card.dart';
+import 'package:linguistic_cabinet/features/words/data/models/word.dart';
+import 'package:linguistic_cabinet/features/review/data/models/review_card.dart';
 
 void main() {
   group('Word Model', () {

@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
 import '../../../words/data/models/word.dart';
 import '../../../../core/theme/cabinet_colors.dart';
 import '../../../../core/theme/cabinet_theme.dart';
@@ -239,13 +240,15 @@ class _FlashcardScreenState extends ConsumerState<FlashcardScreen>
                       onPressed: () => _handleAnswer(false),
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  CabinetBrutalButton(
-                    text: '뒤집기 (Space)',
-                    icon: Icons.flip,
-                    onPressed: _toggleFlip,
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: CabinetBrutalButton(
+                      text: '뒤집기 (Space)',
+                      icon: Icons.flip,
+                      onPressed: _toggleFlip,
+                    ),
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 8),
                   Expanded(
                     child: CabinetBrutalButton(
                       text: '알았다 (Known)',
@@ -276,8 +279,11 @@ class _FlashcardScreenState extends ConsumerState<FlashcardScreen>
         children: [
           Text('READING CARD · FRONT', style: theme.labelMono),
           const Spacer(),
-          Text(word.english, style: theme.wordHuge),
-          if (word.pronunciation != null) ...[
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(word.english, style: theme.wordHuge),
+          ),
+          if (word.pronunciation != null && word.pronunciation!.isNotEmpty) ...[
             const SizedBox(height: 8),
             Text(word.pronunciation!, style: theme.labelMono.copyWith(fontSize: 14)),
           ],
@@ -293,29 +299,70 @@ class _FlashcardScreenState extends ConsumerState<FlashcardScreen>
       colors: colors,
       width: 540,
       height: 380,
-      padding: const EdgeInsets.all(28),
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Text('READING CARD · BACK', style: theme.labelMono),
-          const Spacer(),
-          Text(word.korean, style: theme.meaningSerif.copyWith(fontSize: 28, fontWeight: FontWeight.w600)),
-          if (word.exampleSentence != null && word.exampleSentence!.isNotEmpty) ...[
-            const SizedBox(height: 16),
-            Text(
-              '"${word.exampleSentence}"',
-              textAlign: TextAlign.center,
-              style: theme.meaningSerif.copyWith(fontSize: 16, color: colors.ink2),
+          const SizedBox(height: 12),
+          Expanded(
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 480),
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                        child: Text(
+                          word.korean,
+                          textAlign: TextAlign.center,
+                          style: theme.meaningSerif.copyWith(fontSize: 26, fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ),
+                  ),
+                  if (word.exampleSentence != null && word.exampleSentence!.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      '"${word.exampleSentence}"',
+                      textAlign: TextAlign.center,
+                      style: theme.meaningSerif.copyWith(fontSize: 15, color: colors.ink2),
+                    ),
+                  ],
+                  if (word.memo != null && word.memo!.isNotEmpty) ...[
+                    const SizedBox(height: 14),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: colors.paper3,
+                        borderRadius: BorderRadius.circular(2),
+                        border: Border.all(color: colors.inkLineStrong, width: 0.8),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Moment Note:',
+                            style: theme.labelMono.copyWith(fontSize: 10, color: colors.accent, fontWeight: FontWeight.w700),
+                          ),
+                          const SizedBox(height: 6),
+                          MarkdownBody(
+                            data: word.memo!,
+                            styleSheet: MarkdownStyleSheet(
+                              p: theme.handNote.copyWith(fontSize: 16, color: colors.ink),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ],
+              ),
             ),
-          ],
-          if (word.memo != null && word.memo!.isNotEmpty) ...[
-            const SizedBox(height: 16),
-            Text(
-              'Moment: ${word.memo}',
-              style: theme.handNote.copyWith(fontSize: 18),
-            ),
-          ],
-          const Spacer(),
+          ),
         ],
       ),
     );

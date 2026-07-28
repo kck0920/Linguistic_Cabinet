@@ -1,9 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:vocatree/features/settings/data/services/backup_service.dart';
-import 'package:vocatree/features/words/data/models/word.dart';
-import 'package:vocatree/features/words/data/repositories/word_repository.dart';
-import 'package:vocatree/features/review/data/repositories/review_repository.dart';
-import 'package:vocatree/features/review/data/models/review_card.dart';
+import 'package:linguistic_cabinet/features/settings/data/services/backup_service.dart';
+import 'package:linguistic_cabinet/features/words/data/models/word.dart';
+import 'package:linguistic_cabinet/features/words/data/repositories/word_repository.dart';
+import 'package:linguistic_cabinet/features/review/data/repositories/review_repository.dart';
+import 'package:linguistic_cabinet/features/review/data/models/review_card.dart';
 
 class MockWordRepository extends WordRepository {
   final List<Word> _db = [];

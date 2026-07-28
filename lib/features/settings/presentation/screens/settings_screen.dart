@@ -9,6 +9,7 @@ import '../../../review/data/models/review_card.dart';
 import '../../../review/presentation/screens/review_screen.dart';
 import '../../../quiz/presentation/screens/quiz_screen.dart';
 import '../../../matching/presentation/screens/matching_screen.dart';
+import '../../../../home/home_dashboard_screen.dart';
 
 final reviewMethodProvider = FutureProvider<ReviewMethod>((ref) async {
   final repo = ref.watch(reviewRepositoryProvider);
@@ -84,8 +85,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               child: Row(
                 children: [
                   _buildSubTabButton('THEMES', 0, colors, theme),
+                  const SizedBox(width: 4),
                   _buildSubTabButton('ALGORITHM', 1, colors, theme),
+                  const SizedBox(width: 4),
                   _buildSubTabButton('DATA & BACKUP', 2, colors, theme),
+                  const SizedBox(width: 4),
                   _buildSubTabButton('STATISTICS', 3, colors, theme),
                 ],
               ),
@@ -109,20 +113,28 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     return Expanded(
       child: GestureDetector(
         onTap: () => setState(() => _activeSubTab = index),
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 10),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 2),
           decoration: BoxDecoration(
             color: isSelected ? colors.paper3 : Colors.transparent,
-            borderRadius: BorderRadius.circular(2),
-            border: isSelected ? Border.all(color: colors.inkLineStrong) : null,
+            borderRadius: BorderRadius.circular(3),
+            border: Border.all(
+              color: isSelected ? colors.inkLineStrong : Colors.transparent,
+              width: 1,
+            ),
           ),
           child: Center(
             child: Text(
               label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
               style: theme.labelMono.copyWith(
-                fontSize: 10,
-                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w400,
-                color: isSelected ? colors.accent : colors.ink,
+                fontSize: 9.5,
+                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                color: isSelected ? colors.accent : colors.ink2,
+                letterSpacing: 0.2,
               ),
             ),
           ),
@@ -433,9 +445,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         final backupService = ref.read(backupServiceProvider);
                         final res = await backupService.importBackup();
                         if (res != null && mounted) {
-                          ref.invalidate(wordListProvider);
+                          _refreshAllProviders();
                           ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('단어장 복원 완료 (${res.importedCount}개 추가)')),
+                            SnackBar(content: Text('단어장 복원 완료 (${res.importedCount}개 추가, ${res.updatedCount}개 업데이트)')),
                           );
                         }
                       },
@@ -458,6 +470,27 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         ),
       ],
     );
+  }
+
+  void _refreshAllProviders() {
+    // Collection & Words
+    ref.invalidate(wordListProvider);
+    ref.invalidate(filteredWordsProvider);
+    ref.read(searchQueryProvider.notifier).state = '';
+    ref.read(selectedTagFilterProvider.notifier).state = 'all';
+    ref.read(sortOrderProvider.notifier).state = 'recent';
+
+    // Review
+    ref.invalidate(dueReviewCardsProvider);
+    ref.invalidate(reviewStatsProvider);
+    ref.invalidate(hasReviewedTodayProvider);
+
+    // Quiz & Matching
+    ref.invalidate(quizWordsProvider);
+    ref.invalidate(matchingWordsProvider);
+
+    // Home & Streak
+    ref.invalidate(streakDataProvider);
   }
 
   /// 4. Stats Tab
@@ -540,7 +573,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               onPressed: () async {
                 final repo = ref.read(wordRepositoryProvider);
                 await repo.deleteAllWords();
-                ref.invalidate(wordListProvider);
+                _refreshAllProviders();
                 if (context.mounted) {
                   Navigator.pop(context);
                   ScaffoldMessenger.of(context).showSnackBar(

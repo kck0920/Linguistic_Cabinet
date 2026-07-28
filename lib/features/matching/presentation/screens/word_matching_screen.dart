@@ -117,7 +117,11 @@ class _WordMatchingScreenState extends ConsumerState<WordMatchingScreen>
       _isProcessing = false;
 
       if (_matchedPairs == _totalPairs) {
-        _showCompletionDialog();
+        Future.delayed(const Duration(milliseconds: 300), () {
+          if (mounted) {
+            _showCompletionDialog();
+          }
+        });
       }
     } else {
       // No match - shake and hide

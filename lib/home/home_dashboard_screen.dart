@@ -5,6 +5,8 @@ import '../../core/theme/cabinet_colors.dart';
 import '../../core/theme/cabinet_theme.dart';
 import '../../shared/widgets/cabinet_widgets.dart';
 import '../../features/words/data/models/word.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
+import '../../features/words/presentation/screens/word_form_screen.dart';
 import '../../features/words/presentation/screens/word_list_screen.dart';
 import '../../features/review/presentation/screens/review_screen.dart';
 import '../../home/home_screen.dart';
@@ -171,10 +173,29 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
         child: SizedBox(
           height: 220,
           child: Center(
-            child: Text(
-              'No words collected yet.\nTap "Add Word" to start your cabinet!',
-              textAlign: TextAlign.center,
-              style: theme.handNote.copyWith(fontSize: 20, color: colors.ink3),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  'No words collected yet.\nTap or click below to start your cabinet!',
+                  textAlign: TextAlign.center,
+                  style: theme.handNote.copyWith(fontSize: 18, color: colors.ink3),
+                ),
+                const SizedBox(height: 14),
+                CabinetBrutalButton(
+                  text: '단어 추가하기 (Add Word)',
+                  icon: Icons.add,
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => const WordFormScreen()),
+                    ).then((_) {
+                      ref.invalidate(wordListProvider);
+                      ref.invalidate(filteredWordsProvider);
+                    });
+                  },
+                ),
+              ],
             ),
           ),
         ),
@@ -283,45 +304,78 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
     return CabinetPaperCard(
       colors: colors,
       padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      child: Container(
+        constraints: const BoxConstraints(maxHeight: 380),
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('MEANING & CONTEXT', style: theme.labelMono),
-              Text('TAP TO FLIP ↺', style: theme.labelMono.copyWith(color: colors.accent)),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('MEANING & CONTEXT', style: theme.labelMono),
+                  Text('TAP TO FLIP ↺', style: theme.labelMono.copyWith(color: colors.accent)),
+                ],
+              ),
+              const SizedBox(height: 14),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Padding(
+                  padding: const EdgeInsets.only(right: 12, top: 2, bottom: 2),
+                  child: Text(
+                    word.korean,
+                    style: theme.meaningSerif.copyWith(fontSize: 24, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ),
+              if (word.exampleSentence != null && word.exampleSentence!.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Text(
+                  '"${word.exampleSentence}"',
+                  style: theme.meaningSerif.copyWith(fontSize: 15, color: colors.ink2),
+                ),
+              ],
+              if (word.memo != null && word.memo!.isNotEmpty) ...[
+                const SizedBox(height: 14),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: colors.paper3,
+                    borderRadius: BorderRadius.circular(2),
+                    border: Border.all(color: colors.inkLineStrong, width: 0.8),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Moment Note:',
+                        style: theme.labelMono.copyWith(fontSize: 10, color: colors.accent, fontWeight: FontWeight.w700),
+                      ),
+                      const SizedBox(height: 6),
+                      MarkdownBody(
+                        data: word.memo!,
+                        styleSheet: MarkdownStyleSheet(
+                          p: theme.handNote.copyWith(fontSize: 17, color: colors.ink),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              const SizedBox(height: 20),
+              Align(
+                alignment: Alignment.centerRight,
+                child: CabinetBrutalButton(
+                  text: '복습 완료',
+                  icon: Icons.check,
+                  onPressed: _toggleFlip,
+                ),
+              ),
             ],
           ),
-          const SizedBox(height: 14),
-          Text(
-            word.korean,
-            style: theme.meaningSerif.copyWith(fontSize: 24, fontWeight: FontWeight.w600),
-          ),
-          if (word.exampleSentence != null && word.exampleSentence!.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            Text(
-              '"${word.exampleSentence}"',
-              style: theme.meaningSerif.copyWith(fontSize: 15, color: colors.ink2),
-            ),
-          ],
-          if (word.memo != null && word.memo!.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            Text(
-              'Moment Note: ${word.memo}',
-              style: theme.handNote.copyWith(fontSize: 18),
-            ),
-          ],
-          const SizedBox(height: 20),
-          Align(
-            alignment: Alignment.centerRight,
-            child: CabinetBrutalButton(
-              text: '복습 완료',
-              icon: Icons.check,
-              onPressed: _toggleFlip,
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }

@@ -67,14 +67,21 @@ class BackupService {
     final zipBytes = ZipEncoder().encode(archive);
     if (zipBytes == null) return null;
 
-    final appDir = await getApplicationDocumentsDirectory();
-    final backupDir = Directory('${appDir.path}/backups');
+    Directory backupDir;
+    if (!kIsWeb && Platform.isLinux) {
+      final home = Platform.environment['HOME'] ?? '';
+      backupDir = Directory('$home/.local/share/linguistic_cabinet/backups');
+    } else {
+      final appDir = await getApplicationDocumentsDirectory();
+      backupDir = Directory('${appDir.path}/backups');
+    }
+
     if (!backupDir.existsSync()) {
       await backupDir.create(recursive: true);
     }
 
     final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-').substring(0, 19);
-    final backupPath = '${backupDir.path}/vocatree_$timestamp.zip';
+    final backupPath = '${backupDir.path}/linguistic_cabinet_$timestamp.zip';
     final backupFile = File(backupPath);
     await backupFile.writeAsBytes(Uint8List.fromList(zipBytes));
 
@@ -85,9 +92,10 @@ class BackupService {
   }
 
   Future<void> _cleanupOldBackups(Directory backupDir) async {
+    if (!backupDir.existsSync()) return;
     final files = backupDir.listSync()
         .whereType<File>()
-        .where((f) => f.path.contains('vocatree_') && f.path.endsWith('.zip'))
+        .where((f) => (f.path.contains('linguistic_cabinet_') || f.path.contains('vocatree_')) && f.path.endsWith('.zip'))
         .toList()
       ..sort((a, b) => b.path.compareTo(a.path));
 

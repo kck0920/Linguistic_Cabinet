@@ -6,7 +6,7 @@ import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
 class DatabaseService {
   static Database? _database;
   static const String _dbName = 'vocatree.db';
-  static const int _dbVersion = 6;
+  static const int _dbVersion = 7;
 
   // For testing - allows overriding the database instance
   static Database? _testDatabase;
@@ -66,6 +66,9 @@ class DatabaseService {
               if (oldVersion < 6) {
                 await _addColumnSafe(db, 'review_cards', 'override_method', 'TEXT');
               }
+              if (oldVersion < 7) {
+                await _addColumnSafe(db, 'words', 'dictionary_url', 'TEXT');
+              }
             },
           ),
         );
@@ -92,6 +95,9 @@ class DatabaseService {
         if (oldVersion < 6) {
           await _addColumnSafe(db, 'review_cards', 'override_method', 'TEXT');
         }
+        if (oldVersion < 7) {
+          await _addColumnSafe(db, 'words', 'dictionary_url', 'TEXT');
+        }
       },
     );
   }
@@ -107,7 +113,8 @@ class DatabaseService {
           tags TEXT,
           difficulty INTEGER DEFAULT 3,
           memo TEXT,
-           image_path TEXT,
+          image_path TEXT,
+          dictionary_url TEXT,
           created_at TEXT NOT NULL,
           updated_at TEXT NOT NULL
         )

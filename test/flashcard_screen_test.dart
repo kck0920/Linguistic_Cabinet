@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:vocatree/features/words/data/models/word.dart';
-import 'package:vocatree/features/review/presentation/screens/flashcard_screen.dart';
-import 'package:vocatree/features/review/presentation/screens/review_screen.dart';
-import 'package:vocatree/features/review/data/repositories/review_repository.dart';
+import 'package:linguistic_cabinet/features/words/data/models/word.dart';
+import 'package:linguistic_cabinet/features/review/presentation/screens/flashcard_screen.dart';
+import 'package:linguistic_cabinet/features/review/presentation/screens/review_screen.dart';
+import 'package:linguistic_cabinet/features/review/data/repositories/review_repository.dart';
 
 class FakeReviewRepository extends ReviewRepository {
   final List<Map<String, dynamic>> loggedReviews = [];

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../words/data/models/word.dart';
@@ -21,6 +22,7 @@ class _MeaningQuizScreenState extends ConsumerState<MeaningQuizScreen> {
   late List<Word> _quizWords;
   List<String> _currentOptions = [];
   DateTime? _questionStartTime;
+  Timer? _nextTimer;
 
   @override
   void initState() {
@@ -31,6 +33,12 @@ class _MeaningQuizScreenState extends ConsumerState<MeaningQuizScreen> {
     }
     _generateOptions();
     _questionStartTime = DateTime.now();
+  }
+
+  @override
+  void dispose() {
+    _nextTimer?.cancel();
+    super.dispose();
   }
 
   void _generateOptions() {
@@ -49,7 +57,10 @@ class _MeaningQuizScreenState extends ConsumerState<MeaningQuizScreen> {
   }
 
   void _selectAnswer(int index) {
-    if (_answered) return;
+    if (_answered) {
+      _nextQuestion();
+      return;
+    }
     
     setState(() {
       _selectedAnswer = index;
@@ -63,8 +74,9 @@ class _MeaningQuizScreenState extends ConsumerState<MeaningQuizScreen> {
 
     _recordAnswer(isCorrect);
 
-    Future.delayed(const Duration(seconds: 1), () {
-      if (mounted) {
+    _nextTimer?.cancel();
+    _nextTimer = Timer(const Duration(seconds: 1), () {
+      if (mounted && _answered) {
         _nextQuestion();
       }
     });
@@ -84,6 +96,7 @@ class _MeaningQuizScreenState extends ConsumerState<MeaningQuizScreen> {
   }
 
   void _nextQuestion() {
+    _nextTimer?.cancel();
     if (_currentIndex < _quizWords.length - 1) {
       setState(() {
         _currentIndex++;

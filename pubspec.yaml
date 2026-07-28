@@ -1,5 +1,5 @@
-name: vocatree
-description: "VocaTree - Cross-platform English vocabulary notebook"
+name: linguistic_cabinet
+description: "Linguistic Cabinet - Cross-platform English vocabulary notebook"
 publish_to: 'none'
 
 version: 1.0.0+1
