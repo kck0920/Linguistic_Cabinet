@@ -81,7 +81,10 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
     final streakDays = statsData['currentStreak'] ?? 0;
     final totalReviews = statsData['totalReviews'] ?? 0;
 
-    final Word? wordOfDay = words.isNotEmpty ? words.first : null;
+    final now = DateTime.now();
+    // 30분 단위 시드 (30분마다 자동 단어 변경)
+    final slot30Min = (now.millisecondsSinceEpoch / (1000 * 60 * 30)).floor();
+    final Word? wordOfDay = words.isNotEmpty ? words[slot30Min % words.length] : null;
     final totalCount = words.length;
     final masteredCount = words.where((w) => w.difficulty <= 2).length;
     final plantLevel = math.min(4, (totalCount / 10).floor());
