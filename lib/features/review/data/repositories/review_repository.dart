@@ -275,4 +275,50 @@ class ReviewRepository {
 
     return streakLevels;
   }
+
+  /// 현재 연속 학습 일수 (Current Streak Days) 계산
+  Future<int> getCurrentStreakDays() async {
+    final db = await DatabaseService.database;
+    final result = await db.rawQuery(
+      "SELECT DISTINCT DATE(reviewed_at) as date FROM review_logs ORDER BY date DESC",
+    );
+
+    if (result.isEmpty) return 0;
+
+    final Set<String> activeDates = result
+        .map((r) => r['date'] as String?)
+        .whereType<String>()
+        .toSet();
+
+    final now = DateTime.now();
+    DateTime checkDate = DateTime(now.year, now.month, now.day);
+    String todayKey =
+        "${checkDate.year}-${checkDate.month.toString().padLeft(2, '0')}-${checkDate.day.toString().padLeft(2, '0')}";
+
+    DateTime yesterday = checkDate.subtract(const Duration(days: 1));
+    String yesterdayKey =
+        "${yesterday.year}-${yesterday.month.toString().padLeft(2, '0')}-${yesterday.day.toString().padLeft(2, '0')}";
+
+    if (!activeDates.contains(todayKey) && !activeDates.contains(yesterdayKey)) {
+      return 0;
+    }
+
+    int streak = 0;
+    if (!activeDates.contains(todayKey)) {
+      checkDate = yesterday;
+    }
+
+    while (true) {
+      String key =
+          "${checkDate.year}-${checkDate.month.toString().padLeft(2, '0')}-${checkDate.day.toString().padLeft(2, '0')}";
+      if (activeDates.contains(key)) {
+        streak++;
+        checkDate = checkDate.subtract(const Duration(days: 1));
+      } else {
+        break;
+      }
+    }
+
+    return streak;
+  }
 }

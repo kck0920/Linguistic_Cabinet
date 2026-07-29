@@ -16,6 +16,16 @@ final streakDataProvider = FutureProvider<List<int>>((ref) async {
   return repo.getStreakGridData(days: 182);
 });
 
+final dashboardStatsProvider = FutureProvider<Map<String, int>>((ref) async {
+  final repo = ref.watch(reviewRepositoryProvider);
+  final stats = await repo.getReviewStats();
+  final currentStreak = await repo.getCurrentStreakDays();
+  return {
+    'totalReviews': stats['totalReviews'] as int? ?? 0,
+    'currentStreak': currentStreak,
+  };
+});
+
 class HomeDashboardScreen extends ConsumerStatefulWidget {
   const HomeDashboardScreen({super.key});
 
@@ -66,12 +76,15 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
     final streakAsync = ref.watch(streakDataProvider);
     final streakData = streakAsync.value ?? List<int>.filled(182, 0);
 
+    final statsAsync = ref.watch(dashboardStatsProvider);
+    final statsData = statsAsync.value ?? {'totalReviews': 0, 'currentStreak': 0};
+    final streakDays = statsData['currentStreak'] ?? 0;
+    final totalReviews = statsData['totalReviews'] ?? 0;
+
     final Word? wordOfDay = words.isNotEmpty ? words.first : null;
     final totalCount = words.length;
     final masteredCount = words.where((w) => w.difficulty <= 2).length;
     final plantLevel = math.min(4, (totalCount / 10).floor());
-
-
 
     return CabinetPaperScaffold(
       colors: colors,
@@ -123,7 +136,7 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
                               masteredCount: masteredCount,
                             ),
                             const SizedBox(height: 20),
-                            _buildLedgerSummary(totalCount, masteredCount, colors, theme),
+                            _buildLedgerSummary(totalCount, masteredCount, streakDays, totalReviews, colors, theme),
                             const SizedBox(height: 20),
                             _buildQuickActions(context, colors),
                           ],
@@ -144,7 +157,7 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
                       const SizedBox(height: 20),
                       CabinetStreakGrid(streakLevels: streakData, colors: colors),
                       const SizedBox(height: 20),
-                      _buildLedgerSummary(totalCount, masteredCount, colors, theme),
+                      _buildLedgerSummary(totalCount, masteredCount, streakDays, totalReviews, colors, theme),
                       const SizedBox(height: 20),
                       _buildRecentlyCollectedStrip(context, words, colors, theme),
                       const SizedBox(height: 20),
@@ -430,6 +443,8 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
   Widget _buildLedgerSummary(
     int total,
     int mastered,
+    int streakDays,
+    int totalReviews,
     CabinetColors colors,
     CabinetTheme theme,
   ) {
@@ -448,8 +463,8 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
           children: [
             _buildStatItem('Collected', total.toString(), colors.paper2, colors, theme),
             _buildStatItem('Mastered', mastered.toString(), colors.paper3, colors, theme, isAccent: true),
-            _buildStatItem('Streak', '7 Days', colors.paper2, colors, theme),
-            _buildStatItem('Reviews', '${total * 3}', colors.paper2, colors, theme),
+            _buildStatItem('Streak', '$streakDays ${streakDays == 1 ? 'Day' : 'Days'}', colors.paper2, colors, theme),
+            _buildStatItem('Reviews', '$totalReviews', colors.paper2, colors, theme),
           ],
         ),
       ],
