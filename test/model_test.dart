@@ -264,6 +264,19 @@ void main() {
       expect(card1, equals(card2));
       expect(card1, isNot(equals(card3)));
     });
+
+    test('processReviewResult pushes nextReviewDate into the future', () {
+      final card = ReviewCard(
+        wordId: 'word-id',
+        reviewMethod: ReviewMethod.linear,
+        nextReviewDate: DateTime.now().subtract(const Duration(hours: 1)),
+      );
+
+      final updated = card.processReviewResult(isCorrect: true);
+      expect(updated.isDueForReview, false);
+      expect(updated.nextReviewDate.isAfter(DateTime.now()), true);
+      expect(updated.reviewCount, 1);
+    });
   });
 
   group('ReviewMethod Enum', () {

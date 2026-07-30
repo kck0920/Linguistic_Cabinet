@@ -119,6 +119,10 @@ class _SpellingTypingScreenState extends ConsumerState<SpellingTypingScreen> {
       isCorrect: isCorrect,
       studyMethod: 'spelling_typing',
     );
+    await repo.processReviewResult(
+      wordId: _quizWords[_currentIndex].id,
+      isCorrect: isCorrect,
+    );
   }
 
   void _nextQuestion() {

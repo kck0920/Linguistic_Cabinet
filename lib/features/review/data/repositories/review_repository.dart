@@ -160,6 +160,19 @@ class ReviewRepository {
     await updateReviewCard(updatedCard);
   }
 
+  /// 복습 결과에 따라 설정된 activeMethod 기반으로 리뷰카드 업데이트
+  Future<void> processReviewResult({
+    required String wordId,
+    required bool isCorrect,
+    int quality = 4,
+  }) async {
+    final card = await getReviewCardByWordId(wordId);
+    if (card == null) return;
+    
+    final updatedCard = card.processReviewResult(isCorrect: isCorrect, quality: quality);
+    await updateReviewCard(updatedCard);
+  }
+
   /// 리뷰카드가 없는 단어들을 찾아서 자동으로 생성
   Future<int> ensureReviewCardsExist() async {
     final wordRepo = WordRepository();

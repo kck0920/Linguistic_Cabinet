@@ -66,7 +66,11 @@ class _FlashcardScreenState extends ConsumerState<FlashcardScreen>
       isCorrect: known,
       studyMethod: 'flashcard',
     );
-    await repo.updateReviewCardWithSM2(wordId: word.id, quality: quality);
+    await repo.processReviewResult(
+      wordId: word.id,
+      isCorrect: known,
+      quality: quality,
+    );
 
     await Future.delayed(const Duration(milliseconds: 400));
 
@@ -285,7 +289,21 @@ class _FlashcardScreenState extends ConsumerState<FlashcardScreen>
           ),
           if (word.pronunciation != null && word.pronunciation!.isNotEmpty) ...[
             const SizedBox(height: 8),
-            Text(word.pronunciation!, style: theme.labelMono.copyWith(fontSize: 14)),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 480),
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  word.pronunciation!,
+                  textAlign: TextAlign.center,
+                  style: theme.labelMono.copyWith(
+                    fontSize: 14,
+                    height: 1.45,
+                    color: colors.ink3,
+                  ),
+                ),
+              ),
+            ),
           ],
           const Spacer(),
           Text('뜻이 떠오르나요? Tap to flip ↺', style: theme.handNote.copyWith(fontSize: 20)),
@@ -311,14 +329,17 @@ class _FlashcardScreenState extends ConsumerState<FlashcardScreen>
                 children: [
                   ConstrainedBox(
                     constraints: const BoxConstraints(maxWidth: 480),
-                    child: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                        child: Text(
-                          word.korean,
-                          textAlign: TextAlign.center,
-                          style: theme.meaningSerif.copyWith(fontSize: 26, fontWeight: FontWeight.w600),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                      child: Text(
+                        word.korean,
+                        textAlign: TextAlign.center,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.meaningSerif.copyWith(
+                          fontSize: 22,
+                          height: 1.35,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                     ),

@@ -30,6 +30,11 @@ class FakeReviewRepository extends ReviewRepository {
   Future<void> updateReviewCardWithSM2({required String wordId, required int quality}) async {
     // No-op for tests
   }
+
+  @override
+  Future<void> processReviewResult({required String wordId, required bool isCorrect, int quality = 4}) async {
+    // No-op for tests
+  }
 }
 
 void main() {

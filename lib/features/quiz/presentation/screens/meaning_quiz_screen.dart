@@ -93,6 +93,10 @@ class _MeaningQuizScreenState extends ConsumerState<MeaningQuizScreen> {
       studyMethod: 'meaning_quiz',
       durationMs: durationMs,
     );
+    await repo.processReviewResult(
+      wordId: _quizWords[_currentIndex].id,
+      isCorrect: isCorrect,
+    );
   }
 
   void _nextQuestion() {

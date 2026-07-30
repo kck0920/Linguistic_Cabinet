@@ -107,6 +107,10 @@ class _MeaningTypingScreenState extends ConsumerState<MeaningTypingScreen> {
       isCorrect: isCorrect,
       studyMethod: 'meaning_typing',
     );
+    await repo.processReviewResult(
+      wordId: _quizWords[_currentIndex].id,
+      isCorrect: isCorrect,
+    );
   }
 
   void _nextQuestion() {

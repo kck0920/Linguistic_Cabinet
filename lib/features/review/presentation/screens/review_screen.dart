@@ -253,7 +253,9 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
       ).then((_) {
         ref.invalidate(dueReviewCardsProvider);
         ref.invalidate(reviewStatsProvider);
+        ref.invalidate(hasReviewedTodayProvider);
         ref.invalidate(streakDataProvider);
+        ref.invalidate(dashboardStatsProvider);
       });
     }
   }

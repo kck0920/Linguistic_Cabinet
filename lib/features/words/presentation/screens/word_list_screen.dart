@@ -399,7 +399,10 @@ class WordListScreen extends ConsumerWidget {
 
                         if (word.pronunciation != null && word.pronunciation!.isNotEmpty) ...[
                           const SizedBox(height: 4),
-                          Text(word.pronunciation!, style: theme.labelMono.copyWith(color: colors.ink3)),
+                          Text(
+                            word.pronunciation!,
+                            style: theme.labelMono.copyWith(color: colors.ink3, height: 1.4),
+                          ),
                         ],
                         const SizedBox(height: 14),
 

@@ -282,11 +282,18 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
             word.english,
             style: theme.wordHuge.copyWith(color: colors.ink),
           ),
-          if (word.pronunciation != null) ...[
+          if (word.pronunciation != null && word.pronunciation!.isNotEmpty) ...[
             const SizedBox(height: 4),
-            Text(
-              word.pronunciation!,
-              style: theme.labelMono.copyWith(color: colors.ink3, fontSize: 13),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 480),
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  word.pronunciation!,
+                  style: theme.labelMono.copyWith(color: colors.ink3, fontSize: 13, height: 1.4),
+                ),
+              ),
             ),
           ],
           const SizedBox(height: 16),
@@ -334,14 +341,16 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
                 ],
               ),
               const SizedBox(height: 14),
-              FittedBox(
-                fit: BoxFit.scaleDown,
-                alignment: Alignment.centerLeft,
-                child: Padding(
-                  padding: const EdgeInsets.only(right: 12, top: 2, bottom: 2),
-                  child: Text(
-                    word.korean,
-                    style: theme.meaningSerif.copyWith(fontSize: 24, fontWeight: FontWeight.w600),
+              Padding(
+                padding: const EdgeInsets.only(right: 12, top: 2, bottom: 2),
+                child: Text(
+                  word.korean,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.meaningSerif.copyWith(
+                    fontSize: 22,
+                    height: 1.35,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
               ),

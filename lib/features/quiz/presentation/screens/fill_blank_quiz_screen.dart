@@ -76,6 +76,10 @@ class _FillBlankQuizScreenState extends ConsumerState<FillBlankQuizScreen> {
       studyMethod: 'fill_blank',
       durationMs: durationMs,
     );
+    await repo.processReviewResult(
+      wordId: _quizWords[_currentIndex].id,
+      isCorrect: isCorrect,
+    );
   }
 
   void _nextQuestion() {

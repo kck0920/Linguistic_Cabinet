@@ -119,6 +119,55 @@ class ReviewCard {
     );
   }
 
+  /// 복습 결과(성공/실패)에 따라 activeMethod(linear, fixed, sm2)별 다음 복습 일정 업데이트
+  ReviewCard processReviewResult({required bool isCorrect, int quality = 4}) {
+    final active = activeMethod;
+    if (active == ReviewMethod.sm2) {
+      final q = isCorrect ? (quality < 3 ? 4 : quality) : (quality >= 3 ? 1 : quality);
+      return updateWithSM2(q);
+    } else if (active == ReviewMethod.fixed) {
+      final days = isCorrect ? (fixedIntervalDays ?? 7) : 1;
+      return ReviewCard(
+        id: id,
+        wordId: wordId,
+        reviewMethod: reviewMethod,
+        overrideMethod: overrideMethod,
+        fixedIntervalDays: fixedIntervalDays,
+        nextReviewDate: DateTime.now().add(Duration(days: days)),
+        reviewCount: isCorrect ? reviewCount + 1 : 0,
+        createdAt: createdAt,
+        easinessFactor: easinessFactor,
+        interval: days,
+        repetition: isCorrect ? repetition + 1 : 0,
+      );
+    } else {
+      // Linear method: 1 -> 3 -> 7 -> 30 days
+      int daysToAdd;
+      int newCount;
+      if (isCorrect) {
+        newCount = reviewCount + 1;
+        final scheduleIndex = reviewCount.clamp(0, linearSchedule.length - 1);
+        daysToAdd = linearSchedule[scheduleIndex];
+      } else {
+        newCount = 0;
+        daysToAdd = 1;
+      }
+      return ReviewCard(
+        id: id,
+        wordId: wordId,
+        reviewMethod: reviewMethod,
+        overrideMethod: overrideMethod,
+        fixedIntervalDays: fixedIntervalDays,
+        nextReviewDate: DateTime.now().add(Duration(days: daysToAdd)),
+        reviewCount: newCount,
+        createdAt: createdAt,
+        easinessFactor: easinessFactor,
+        interval: daysToAdd,
+        repetition: isCorrect ? repetition + 1 : 0,
+      );
+    }
+  }
+
   bool get isDueForReview {
     return DateTime.now().isAfter(nextReviewDate) || 
            DateTime.now().isAtSameMomentAs(nextReviewDate);
