@@ -372,9 +372,7 @@ class _FlashcardScreenState extends ConsumerState<FlashcardScreen>
                           const SizedBox(height: 6),
                           MarkdownBody(
                             data: word.memo!,
-                            styleSheet: MarkdownStyleSheet(
-                              p: theme.handNote.copyWith(fontSize: 16, color: colors.ink),
-                            ),
+                            styleSheet: theme.buildMarkdownStyle(fontSize: 16, textColor: colors.ink),
                           ),
                         ],
                       ),

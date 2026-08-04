@@ -276,7 +276,7 @@ class _WordFormScreenState extends ConsumerState<WordFormScreen> {
                         ),
                         TextFormField(
                           controller: _dictionaryUrlController,
-                          style: theme.labelMono.copyWith(fontSize: 12),
+                          style: theme.labelMono.copyWith(fontSize: 12, height: 1.35),
                           decoration: _buildInputDecoration('e.g. https://endic.naver.com/...', colors, theme),
                         ),
                         const SizedBox(height: 16),
@@ -285,8 +285,11 @@ class _WordFormScreenState extends ConsumerState<WordFormScreen> {
                         _buildLabel('IPA / PRONUNCIATION', theme),
                         TextFormField(
                           controller: _pronunciationController,
-                          style: theme.labelMono.copyWith(fontSize: 13),
-                          decoration: _buildInputDecoration('e.g. /ˌserənˈdɪpəti/', colors, theme),
+                          minLines: 1,
+                          maxLines: 3,
+                          keyboardType: TextInputType.multiline,
+                          style: theme.labelMono.copyWith(fontSize: 13, height: 1.4, color: colors.ink),
+                          decoration: _buildInputDecoration('e.g. /ˌserənˈdɪpəti/ (동사)', colors, theme),
                         ),
                         const SizedBox(height: 16),
 
@@ -294,8 +297,8 @@ class _WordFormScreenState extends ConsumerState<WordFormScreen> {
                         _buildLabel('EXAMPLE SENTENCE', theme),
                         TextFormField(
                           controller: _exampleController,
-                          style: theme.meaningSerif.copyWith(fontSize: 15),
-                          maxLines: 2,
+                          style: theme.meaningSerif.copyWith(fontSize: 15, height: 1.4),
+                          maxLines: 3,
                           decoration: _buildInputDecoration('e.g. Finding this place was pure serendipity.', colors, theme),
                         ),
                         const SizedBox(height: 16),
@@ -396,9 +399,7 @@ class _WordFormScreenState extends ConsumerState<WordFormScreen> {
                                 ? Text('작성된 메모가 없습니다.', style: theme.handNote.copyWith(color: colors.ink4))
                                 : MarkdownBody(
                                     data: _memoController.text,
-                                    styleSheet: MarkdownStyleSheet(
-                                      p: theme.handNote.copyWith(fontSize: 17, color: colors.ink),
-                                    ),
+                                    styleSheet: theme.buildMarkdownStyle(fontSize: 17, textColor: colors.ink),
                                   ),
                           )
                         else
@@ -473,7 +474,7 @@ class _WordFormScreenState extends ConsumerState<WordFormScreen> {
       hintStyle: theme.labelMono.copyWith(color: colors.ink4, fontSize: 12),
       filled: true,
       fillColor: colors.paper,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(2),
         borderSide: BorderSide(color: colors.inkLineStrong),

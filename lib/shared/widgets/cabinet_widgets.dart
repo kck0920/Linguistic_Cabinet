@@ -516,21 +516,31 @@ class CabinetWordGarden extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = CabinetTheme(colors);
     // Level calculation thresholds: 0, 5, 12, 20, 30
-    final thresholds = [0, 5, 12, 20, 30];
+    final thresholds = [0, 5, 12, 20, 35, 50];
+    int maxLevel = 5;
     int calculatedLevel = 0;
     for (int i = 0; i < thresholds.length; i++) {
       if (totalCount >= thresholds[i]) {
         calculatedLevel = i;
       }
     }
-    final level = plantLevel.clamp(0, 4) > calculatedLevel ? plantLevel.clamp(0, 4) : calculatedLevel;
+    final level = plantLevel.clamp(0, maxLevel) > calculatedLevel ? plantLevel.clamp(0, maxLevel) : calculatedLevel;
 
-    int currentMin = thresholds[level.clamp(0, 4)];
-    int nextMin = level < 4 ? thresholds[level + 1] : 30;
-    int remaining = level < 4 ? (nextMin - totalCount) : 0;
-    double progress = level == 4
+    int currentMin = thresholds[level.clamp(0, maxLevel)];
+    int nextMin = level < maxLevel ? thresholds[level + 1] : thresholds.last;
+    int remaining = level < maxLevel ? (nextMin - totalCount) : 0;
+    double progress = level == maxLevel
         ? 1.0
         : ((totalCount - currentMin) / (nextMin - currentMin)).clamp(0.0, 1.0);
+
+    String statusText;
+    if (level >= 5) {
+      statusText = 'Master Botanical Garden! ✨🌸';
+    } else if (level == 4) {
+      statusText = 'Garden Fully Bloomed! 🌸 ($remaining words to Master)';
+    } else {
+      statusText = 'Next bloom in $remaining words ($masteredCount Mastered)';
+    }
 
     return CabinetPaperCard(
       colors: colors,
@@ -542,14 +552,14 @@ class CabinetWordGarden extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text('SECTION · WORD GARDEN', style: theme.labelMono),
-              Text('LVL $level / 4', style: theme.labelMono.copyWith(color: colors.accent)),
+              Text('LVL $level / $maxLevel', style: theme.labelMono.copyWith(color: colors.accent)),
             ],
           ),
           const SizedBox(height: 12),
           Center(
             child: SizedBox(
-              width: 140,
-              height: 140,
+              width: 150,
+              height: 150,
               child: CustomPaint(
                 painter: _PlantPainter(level: level, colors: colors),
               ),
@@ -557,9 +567,7 @@ class CabinetWordGarden extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            level == 4
-                ? 'Garden Fully Bloomed! 🌸'
-                : 'Next bloom in $remaining words ($masteredCount Mastered)',
+            statusText,
             style: theme.handNote.copyWith(fontSize: 16),
           ),
           const SizedBox(height: 6),
@@ -588,70 +596,145 @@ class _PlantPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final cx = size.width / 2;
     final potTop = size.height * 0.72;
+    int maxLevel = 5;
+    final displayLevel = level.clamp(0, maxLevel);
 
-    // 1. Flower Pot
+    // 1. Flower Pot (빈티지 토분 디테일)
     final potPaint = Paint()
       ..color = colors.ink2
       ..style = PaintingStyle.fill;
     final potPath = Path()
-      ..moveTo(cx - 24, potTop)
-      ..lineTo(cx + 24, potTop)
-      ..lineTo(cx + 18, size.height - 10)
-      ..lineTo(cx - 18, size.height - 10)
+      ..moveTo(cx - 28, potTop)
+      ..lineTo(cx + 28, potTop)
+      ..lineTo(cx + 21, size.height - 8)
+      ..lineTo(cx - 21, size.height - 8)
       ..close();
     canvas.drawPath(potPath, potPaint);
 
+    // Pot Rim
     final rimPaint = Paint()
       ..color = colors.ink
       ..style = PaintingStyle.fill;
-    canvas.drawRect(Rect.fromLTRB(cx - 28, potTop - 6, cx + 28, potTop), rimPaint);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTRB(cx - 32, potTop - 7, cx + 32, potTop),
+        const Radius.circular(2),
+      ),
+      rimPaint,
+    );
 
-    // 2. Stem
+    // Pot Accent Line
+    final linePaint = Paint()
+      ..color = colors.paper2
+      ..strokeWidth = 1.5
+      ..style = PaintingStyle.stroke;
+    canvas.drawLine(Offset(cx - 26, potTop + 6), Offset(cx + 26, potTop + 6), linePaint);
+
+    // 2. Main Stem & Side Stems
     final stemPaint = Paint()
       ..color = colors.accent3
       ..strokeWidth = 3.5
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round;
 
-    final stemPath = Path()
-      ..moveTo(cx, potTop - 6)
-      ..quadraticBezierTo(cx - 10, potTop - 40, cx, potTop - 70);
-    canvas.drawPath(stemPath, stemPaint);
+    // Center Main Stem
+    final mainStemPath = Path()
+      ..moveTo(cx, potTop - 7)
+      ..quadraticBezierTo(cx - 12, potTop - 45, cx - 2, potTop - 75);
+    canvas.drawPath(mainStemPath, stemPaint);
 
-    // 3. Leaves & Flowers based on level
+    if (displayLevel >= 3) {
+      // Left Branch Stem
+      final leftBranch = Path()
+        ..moveTo(cx - 4, potTop - 35)
+        ..quadraticBezierTo(cx - 22, potTop - 50, cx - 28, potTop - 62);
+      canvas.drawPath(leftBranch, stemPaint..strokeWidth = 2.5);
+
+      // Right Branch Stem
+      final rightBranch = Path()
+        ..moveTo(cx + 1, potTop - 42)
+        ..quadraticBezierTo(cx + 20, potTop - 56, cx + 24, potTop - 68);
+      canvas.drawPath(rightBranch, stemPaint..strokeWidth = 2.5);
+    }
+
+    // 3. Leaves (풍성한 잎사귀들)
     final leafPaint = Paint()
       ..color = colors.accent3
       ..style = PaintingStyle.fill;
 
-    if (level >= 1) {
-      // Left leaf
+    if (displayLevel >= 1) {
+      // Lower Left Leaf
       canvas.drawOval(
-        Rect.fromCenter(center: Offset(cx - 14, potTop - 35), width: 18, height: 10),
+        Rect.fromCenter(center: Offset(cx - 16, potTop - 25), width: 22, height: 12),
         leafPaint,
       );
     }
-    if (level >= 2) {
-      // Right leaf
+    if (displayLevel >= 2) {
+      // Lower Right Leaf
       canvas.drawOval(
-        Rect.fromCenter(center: Offset(cx + 14, potTop - 50), width: 20, height: 11),
+        Rect.fromCenter(center: Offset(cx + 16, potTop - 34), width: 24, height: 12),
         leafPaint,
       );
     }
-    if (level >= 3) {
-      // Flower Bud
-      final budPaint = Paint()..color = colors.accent;
-      canvas.drawCircle(Offset(cx, potTop - 74), 7, budPaint);
+    if (displayLevel >= 3) {
+      // Middle Leaves
+      canvas.drawOval(
+        Rect.fromCenter(center: Offset(cx - 20, potTop - 48), width: 18, height: 10),
+        leafPaint,
+      );
+      canvas.drawOval(
+        Rect.fromCenter(center: Offset(cx + 18, potTop - 52), width: 18, height: 10),
+        leafPaint,
+      );
     }
-    if (level >= 4) {
-      // Blooming Flowers
-      final flowerPaint = Paint()..color = colors.accent2;
-      for (int i = 0; i < 5; i++) {
-        final double angle = (i * 72) * math.pi / 180;
-        final dx = cx + 10 * math.cos(angle);
-        final dy = (potTop - 74) + 10 * math.sin(angle);
-        canvas.drawCircle(Offset(dx, dy), 5, flowerPaint);
+    if (displayLevel >= 4) {
+      // Upper Small Leaves
+      canvas.drawOval(
+        Rect.fromCenter(center: Offset(cx - 10, potTop - 64), width: 14, height: 8),
+        leafPaint,
+      );
+      canvas.drawOval(
+        Rect.fromCenter(center: Offset(cx + 12, potTop - 66), width: 14, height: 8),
+        leafPaint,
+      );
+    }
+
+    // 4. Flowers & Blooms (풍성한 꽃송이들)
+    void drawFlower(Canvas canvas, Offset center, double size, Color petalColor, Color centerColor) {
+      final pPaint = Paint()..color = petalColor;
+      for (int i = 0; i < 6; i++) {
+        final double angle = (i * 60) * math.pi / 180;
+        final dx = center.dx + (size * 0.8) * math.cos(angle);
+        final dy = center.dy + (size * 0.8) * math.sin(angle);
+        canvas.drawCircle(Offset(dx, dy), size * 0.55, pPaint);
       }
-      canvas.drawCircle(Offset(cx, potTop - 74), 4, Paint()..color = colors.paper);
+      canvas.drawCircle(center, size * 0.5, Paint()..color = centerColor);
+      canvas.drawCircle(center, size * 0.25, Paint()..color = colors.paper);
+    }
+
+    if (displayLevel == 3) {
+      // Bud stage
+      canvas.drawCircle(Offset(cx - 2, potTop - 78), 8, Paint()..color = colors.accent);
+    }
+
+    if (displayLevel >= 4) {
+      // Main Top Flower (중앙 큰 꽃)
+      drawFlower(canvas, Offset(cx - 2, potTop - 78), 9.0, colors.accent, colors.paper3);
+
+      // Side Flowers (양 옆 추가 꽃송이들)
+      drawFlower(canvas, Offset(cx - 28, potTop - 64), 6.5, colors.accent2, colors.paper3);
+      drawFlower(canvas, Offset(cx + 24, potTop - 70), 7.0, colors.tapeYellow, colors.accent);
+    }
+
+    if (displayLevel >= 5) {
+      // Level 5 (Botanical Master Special Bloom) - 반짝이 입자 및 4번째 꽃
+      drawFlower(canvas, Offset(cx + 2, potTop - 94), 8.0, colors.tapePink, colors.paper3);
+
+      final sparkPaint = Paint()..color = colors.accent;
+      canvas.drawCircle(Offset(cx - 36, potTop - 80), 2.5, sparkPaint);
+      canvas.drawCircle(Offset(cx + 34, potTop - 85), 2.0, sparkPaint);
+      canvas.drawCircle(Offset(cx - 18, potTop - 98), 2.0, sparkPaint);
+      canvas.drawCircle(Offset(cx + 20, potTop - 100), 2.5, sparkPaint);
     }
   }
 

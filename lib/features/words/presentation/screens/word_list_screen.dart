@@ -485,9 +485,7 @@ class WordListScreen extends ConsumerWidget {
                               if (word.memo != null && word.memo!.isNotEmpty)
                                 MarkdownBody(
                                   data: word.memo!,
-                                  styleSheet: MarkdownStyleSheet(
-                                    p: theme.handNote.copyWith(fontSize: 17, color: colors.ink),
-                                  ),
+                                  styleSheet: theme.buildMarkdownStyle(fontSize: 17, textColor: colors.ink),
                                 )
                               else
                                 Text(

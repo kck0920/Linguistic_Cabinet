@@ -87,7 +87,7 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
     final Word? wordOfDay = words.isNotEmpty ? words[slot30Min % words.length] : null;
     final totalCount = words.length;
     final masteredCount = words.where((w) => w.difficulty <= 2).length;
-    final plantLevel = math.min(4, (totalCount / 10).floor());
+    final plantLevel = math.min(5, (totalCount / 10).floor());
 
     return CabinetPaperScaffold(
       colors: colors,
@@ -381,9 +381,7 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
                       const SizedBox(height: 6),
                       MarkdownBody(
                         data: word.memo!,
-                        styleSheet: MarkdownStyleSheet(
-                          p: theme.handNote.copyWith(fontSize: 17, color: colors.ink),
-                        ),
+                        styleSheet: theme.buildMarkdownStyle(fontSize: 17, textColor: colors.ink),
                       ),
                     ],
                   ),
