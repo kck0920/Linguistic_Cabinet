@@ -99,6 +99,35 @@ class ReviewReminderService {
       notificationDetails: notificationDetails,
     );
   }
+
+  /// 마스터 정원 기념일 축하 알림 (모바일 전용, 실패 시 무시).
+  /// 예약(zonedSchedule)은 데스크톱/웹에서 미지원이므로 앱 실행 중 감지 시
+  /// 즉시 표시하는 안전한 폴백 방식으로 동작한다.
+  Future<void> showAnniversaryNotification() async {
+    try {
+      await init();
+      const AndroidNotificationDetails androidNotificationDetails =
+          AndroidNotificationDetails(
+        'vocatree_anniversary',
+        '기념일 축하',
+        channelDescription: 'VocaTree 마스터 정원 기념일 알림 채널',
+        importance: Importance.max,
+        priority: Priority.high,
+      );
+      const NotificationDetails notificationDetails = NotificationDetails(
+        android: androidNotificationDetails,
+        iOS: DarwinNotificationDetails(),
+      );
+      await _notificationsPlugin.show(
+        id: 1,
+        title: '🎉 마스터 정원 기념일!',
+        body: '1년 전 오늘, 2,000단어를 모아 정원을 완성했어요. 축하합니다!',
+        notificationDetails: notificationDetails,
+      );
+    } catch (_) {
+      // 데스크톱/웹 등 미지원 플랫폼은 무시 (인앱 배너가 대신 동작)
+    }
+  }
 }
 
 final reviewReminderServiceProvider = Provider<ReviewReminderService>((ref) {

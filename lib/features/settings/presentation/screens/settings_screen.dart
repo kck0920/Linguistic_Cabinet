@@ -10,6 +10,7 @@ import '../../../review/presentation/screens/review_screen.dart';
 import '../../../quiz/presentation/screens/quiz_screen.dart';
 import '../../../matching/presentation/screens/matching_screen.dart';
 import '../../../../home/home_dashboard_screen.dart';
+import '../../../../dev/garden_preview_screen.dart';
 
 final reviewMethodProvider = FutureProvider<ReviewMethod>((ref) async {
   final repo = ref.watch(reviewRepositoryProvider);
@@ -296,7 +297,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 boxShadow: isSelected
                     ? [
                         BoxShadow(
-                          color: colors.accent.withOpacity(0.15),
+                          color: colors.accent.withValues(alpha: 0.15),
                           blurRadius: 6,
                           offset: const Offset(0, 2),
                         ),
@@ -552,6 +553,40 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ],
           ),
         ),
+        if (kGardenPreviewEnabled) ...[
+          const SizedBox(height: 24),
+          Text('DEV TOOLS', style: theme.labelMono),
+          const SizedBox(height: 10),
+          CabinetPaperCard(
+            colors: colors,
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('단어 정원 미리보기', style: theme.wordTitle.copyWith(fontSize: 16)),
+                const SizedBox(height: 6),
+                Text(
+                  '레벨 0~20 화분/식물 모습을 개발용으로 확인합니다.',
+                  style: theme.bodySans.copyWith(color: colors.ink3),
+                ),
+                const SizedBox(height: 12),
+                CabinetBrutalButton(
+                  text: '정원 미리보기 열기',
+                  icon: Icons.grass,
+                  fullWidth: true,
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const GardenPreviewScreen(),
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+        ],
       ],
     );
   }

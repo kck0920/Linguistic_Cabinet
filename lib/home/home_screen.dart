@@ -9,6 +9,8 @@ import '../features/matching/presentation/screens/matching_screen.dart';
 import '../features/settings/presentation/screens/settings_screen.dart';
 import '../features/settings/data/services/backup_service.dart';
 import '../features/settings/data/services/review_reminder_service.dart';
+import '../features/achievements/data/anniversary_service.dart';
+import '../features/achievements/presentation/achievement_toast_overlay.dart';
 import 'home_dashboard_screen.dart';
 
 final currentTabIndexProvider = StateProvider<int>((ref) => 0);
@@ -27,6 +29,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
     WidgetsBinding.instance.addObserver(this);
     _triggerAutoBackup();
     _checkReviewReminder();
+    _checkAnniversary();
   }
 
   @override
@@ -60,6 +63,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
       if (shouldShow && mounted) {
         await reminderService.showNotification();
       }
+    } catch (_) {}
+  }
+
+  /// 마스터 정원 기념일 감지: 오늘이 달성 기념일이면 모바일 시스템 알림을
+  /// 시도한다 (데스크톱/웹은 미지원이라 무시되고, 인앱 배너가 대신 동작).
+  Future<void> _checkAnniversary() async {
+    try {
+      final service = ref.read(anniversaryServiceProvider);
+      final isToday = await service.isAnniversaryToday();
+      if (!isToday) return;
+      final reminderService = ref.read(reviewReminderServiceProvider);
+      await reminderService.showAnniversaryNotification();
     } catch (_) {}
   }
 
@@ -132,9 +147,25 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
                   ),
                 )
               : null,
-          body: IndexedStack(
-            index: currentIndex,
-            children: screens,
+          body: Stack(
+            children: [
+              IndexedStack(
+                index: currentIndex,
+                children: screens,
+              ),
+              // 업적 해금 축하 토스트: 어느 탭에서든 새 해금을 알린다.
+              // (터치를 가로채지 않도록 IgnorePointer로 감싼다)
+              Positioned(
+                top: 12,
+                left: 0,
+                right: 0,
+                child: IgnorePointer(
+                  child: Center(
+                    child: CabinetAchievementToastOverlay(),
+                  ),
+                ),
+              ),
+            ],
           ),
           bottomNavigationBar: isWideScreen
               ? null

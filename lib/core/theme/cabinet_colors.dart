@@ -42,6 +42,19 @@ class CabinetColors {
   final Color brutalInk;
   final Color brutalShadow;
 
+  /// 진행률(0~1)에 따른 '달아오르는' 단계 색상: 회색 → 금색 → 주황.
+  /// 업적 배지 진행 링·마스터 배지 카드가 공용으로 사용한다.
+  /// mono 테마는 accent2(0x555555)와 ink3(0x4A4A4A)가 거의 같아
+  /// 중간 단계를 더 밝은 ink4(0x7A7A7A)로 사용해 3단계를 구분한다.
+  Color progressHeat(double progress) {
+    if (progress >= 0.67) return accent; // 거의 달성: 주황 (mono: 어두운 회색)
+    if (progress >= 0.34) {
+      // 절반 이상: 금색 (mono: 밝은 회색)
+      return mode == CabinetThemeMode.mono ? ink4 : accent2;
+    }
+    return ink3; // 초기: 회색
+  }
+
   const CabinetColors({
     required this.mode,
     required this.paper,

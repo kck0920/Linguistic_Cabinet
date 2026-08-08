@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../words/data/models/word.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../review/presentation/screens/review_screen.dart';
+import '../../../achievements/data/achievement_evaluator.dart';
 
 class FillBlankQuizScreen extends ConsumerStatefulWidget {
   final List<Word> words;
@@ -80,6 +81,8 @@ class _FillBlankQuizScreenState extends ConsumerState<FillBlankQuizScreen> {
       wordId: _quizWords[_currentIndex].id,
       isCorrect: isCorrect,
     );
+    // 답변 기록 직후 업적을 즉시 평가한다 (재시작 없이 해금/토스트, fire-and-forget).
+    unawaited(ref.read(achievementEvaluatorProvider).evaluateNow());
   }
 
   void _nextQuestion() {

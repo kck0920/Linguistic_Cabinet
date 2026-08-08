@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -7,6 +8,7 @@ import '../../../words/data/models/word.dart';
 import '../../../../core/theme/cabinet_colors.dart';
 import '../../../../core/theme/cabinet_theme.dart';
 import '../../../../shared/widgets/cabinet_widgets.dart';
+import '../../../achievements/data/achievement_evaluator.dart';
 import 'review_screen.dart';
 
 class FlashcardScreen extends ConsumerStatefulWidget {
@@ -71,6 +73,8 @@ class _FlashcardScreenState extends ConsumerState<FlashcardScreen>
       isCorrect: known,
       quality: quality,
     );
+    // 복습 완료 직후 업적을 즉시 평가한다 (재시작 없이 해금/토스트, fire-and-forget).
+    unawaited(ref.read(achievementEvaluatorProvider).evaluateNow());
 
     await Future.delayed(const Duration(milliseconds: 400));
 

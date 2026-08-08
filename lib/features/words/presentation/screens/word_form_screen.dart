@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
@@ -8,6 +9,7 @@ import 'package:flutter_markdown/flutter_markdown.dart';
 import '../../data/models/word.dart';
 import '../../../review/data/models/review_card.dart';
 import '../../../review/presentation/screens/review_screen.dart';
+import '../../../achievements/data/achievement_evaluator.dart';
 import 'word_list_screen.dart';
 import '../../../../core/theme/cabinet_colors.dart';
 import '../../../../core/theme/cabinet_theme.dart';
@@ -567,6 +569,9 @@ class _WordFormScreenState extends ConsumerState<WordFormScreen> {
       );
       await reviewRepo.insertReviewCard(newCard);
     }
+
+    // 단어 추가 직후 업적(First Word/Collector 등)을 즉시 평가한다 (fire-and-forget).
+    unawaited(ref.read(achievementEvaluatorProvider).evaluateNow());
 
     if (mounted) Navigator.pop(context);
   }

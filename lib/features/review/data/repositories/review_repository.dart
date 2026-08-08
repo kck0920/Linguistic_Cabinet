@@ -289,6 +289,37 @@ class ReviewRepository {
     return streakLevels;
   }
 
+  /// 각 달(1~12)의 '최대 학습 일수' (연도 무관, 모든 연도 중 최대치).
+  /// 예: 2025년 3월에 15일, 2026년 3월에 23일 학습 → {3: 23}.
+  /// 월간 업적(각 달 20일 이상 학습) 평가에 사용된다.
+  Future<Map<int, int>> getMonthlyStudyDayCounts() async {
+    final db = await DatabaseService.database;
+    final result = await db.rawQuery(
+      'SELECT DISTINCT DATE(reviewed_at) as date FROM review_logs',
+    );
+
+    // (연도-월) → 서로 다른 날짜 집합
+    final Map<String, Set<String>> byYearMonth = {};
+    for (final row in result) {
+      final dateStr = row['date'] as String?;
+      if (dateStr == null || dateStr.length < 8) continue;
+      final yearMonth = dateStr.substring(0, 7); // yyyy-mm
+      byYearMonth.putIfAbsent(yearMonth, () => <String>{}).add(dateStr);
+    }
+
+    // 달(1~12) → 모든 연도 중 가장 많은 학습 일수
+    final Map<int, int> maxByMonth = {};
+    byYearMonth.forEach((yearMonth, dates) {
+      final month = int.tryParse(yearMonth.substring(5, 7));
+      if (month == null) return;
+      final count = dates.length;
+      if (count > (maxByMonth[month] ?? 0)) {
+        maxByMonth[month] = count;
+      }
+    });
+    return maxByMonth;
+  }
+
   /// 현재 연속 학습 일수 (Current Streak Days) 계산
   Future<int> getCurrentStreakDays() async {
     final db = await DatabaseService.database;
