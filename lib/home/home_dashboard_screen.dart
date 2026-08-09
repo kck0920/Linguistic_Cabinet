@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -124,8 +125,16 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
   Widget build(BuildContext context) {
     // 홈 탭으로 돌아올 때마다 업적을 재평가해 새 해금을 토스트로 알린다.
     // (복습/퀴즈 직후 스트릭·월간 업적이 해금되는 경우 실시간 반영)
+    // 퀴즈/매칭 등에서 쌓인 복습 로그를 반영해 통계·스트릭도 함께 최신화한다.
     ref.listen<int>(currentTabIndexProvider, (prev, next) {
-      if (next == 0 && prev != 0) _evaluateAchievements();
+      if (next == 0 && prev != 0) {
+        ref.invalidate(dashboardStatsProvider);
+        ref.invalidate(streakDataProvider);
+        ref.invalidate(masteredCountProvider);
+        _evaluateAchievements();
+        // 복습/퀴즈/매칭에서 변한 학습 상태를 홈 화면 위젯에도 반영.
+        unawaited(ref.read(homeWidgetServiceProvider).refreshWidgetData());
+      }
     });
 
     final themeMode = ref.watch(cabinetThemeModeProvider);
@@ -151,7 +160,9 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
         ? words[slot30Min % words.length]
         : null;
     final totalCount = words.length;
-    final masteredCount = words.where((w) => w.difficulty <= 2).length;
+    // 숙달 수는 공용 프로바이더(getMasteredCount)의 단일 진실 원천을 사용한다.
+    final masteredAsync = ref.watch(masteredCountProvider);
+    final masteredCount = masteredAsync.value ?? 0;
     final badgeAsync = ref.watch(masterGardenBadgeProvider);
     final badgeDate = badgeAsync.valueOrNull;
 
@@ -759,6 +770,8 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
     CabinetColors colors,
     CabinetTheme theme,
   ) {
+    // 숙달 진행률: 전체 수집 단어 중 숙달(난이도 ≤ 2) 비율
+    final masteredPct = total > 0 ? (mastered / total * 100).round() : 0;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -781,11 +794,14 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
             ),
             _buildStatItem(
               'Mastered',
-              mastered.toString(),
+              total > 0
+                  ? '${AchievementService.formatCount(mastered)} / ${AchievementService.formatCount(total)}'
+                  : '0',
               colors.paper3,
               colors,
               theme,
               isAccent: true,
+              subtitle: total > 0 ? '$masteredPct% 숙달' : null,
             ),
             _buildStatItem(
               'Streak',
@@ -814,6 +830,7 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
     CabinetColors colors,
     CabinetTheme theme, {
     bool isAccent = false,
+    String? subtitle,
   }) {
     return Container(
       padding: const EdgeInsets.all(12),
@@ -834,14 +851,35 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen>
             style: theme.labelMono.copyWith(fontSize: 9),
           ),
           const SizedBox(height: 4),
-          Text(
-            value,
-            style: theme.displaySerif.copyWith(
-              fontSize: 22,
-              color: isAccent ? colors.accent : colors.ink,
-              fontWeight: FontWeight.w600,
+          // 값(예: '3 / 5', '1,200 / 2,000')이 좁은 타일에서 넘치지 않도록 스케일다운
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              value,
+              maxLines: 1,
+              style: theme.displaySerif.copyWith(
+                fontSize: 22,
+                color: isAccent ? colors.accent : colors.ink,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
+          if (subtitle != null) ...[
+            const SizedBox(height: 2),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(
+                subtitle,
+                maxLines: 1,
+                style: theme.labelMono.copyWith(
+                  fontSize: 8,
+                  color: isAccent ? colors.accent : colors.ink3,
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );

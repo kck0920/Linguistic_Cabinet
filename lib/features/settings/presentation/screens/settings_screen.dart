@@ -2,10 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/cabinet_colors.dart';
 import '../../../../core/theme/cabinet_theme.dart';
+import '../../../../core/utils/format_count.dart';
 import '../../../../shared/widgets/cabinet_widgets.dart';
 import '../../data/services/backup_service.dart';
+import '../../data/services/review_reminder_service.dart';
 import '../../../words/presentation/screens/word_list_screen.dart';
 import '../../../review/data/models/review_card.dart';
+import '../../../review/data/repositories/review_repository.dart';
 import '../../../review/presentation/screens/review_screen.dart';
 import '../../../quiz/presentation/screens/quiz_screen.dart';
 import '../../../matching/presentation/screens/matching_screen.dart';
@@ -31,6 +34,14 @@ final fixedIntervalDaysProvider = FutureProvider<int?>((ref) async {
   return value != null ? int.tryParse(value) : null;
 });
 
+/// 복습 결과 → 단어 난이도 자동 반영 여부 (기본: 켬).
+/// 설정 키가 'false'면 꺼짐, 그 외(설정 없음 포함)는 켜짐.
+final autoDifficultyEnabledProvider = FutureProvider<bool>((ref) async {
+  final repo = ref.watch(reviewRepositoryProvider);
+  final value = await repo.getSetting(ReviewRepository.autoDifficultySettingKey);
+  return value == null || value != 'false';
+});
+
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
 
@@ -41,11 +52,14 @@ class SettingsScreen extends ConsumerStatefulWidget {
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   int _activeSubTab = 0; // 0: Themes, 1: Algo, 2: Data, 3: Stats
   bool _autoBackupEnabled = false;
+  bool _reminderEnabled = false;
+  String _reminderTime = '09:00';
 
   @override
   void initState() {
     super.initState();
     _loadAutoBackupSetting();
+    _loadReminderSetting();
   }
 
   Future<void> _loadAutoBackupSetting() async {
@@ -54,6 +68,18 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     if (mounted) {
       setState(() {
         _autoBackupEnabled = enabled;
+      });
+    }
+  }
+
+  Future<void> _loadReminderSetting() async {
+    final reminderService = ref.read(reviewReminderServiceProvider);
+    final enabled = await reminderService.isReminderEnabled();
+    final time = await reminderService.getReminderTime();
+    if (mounted) {
+      setState(() {
+        _reminderEnabled = enabled;
+        _reminderTime = time;
       });
     }
   }
@@ -384,7 +410,35 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
           );
         }),
+        const SizedBox(height: 8),
+        _buildAutoDifficultyToggle(colors, theme),
       ],
+    );
+  }
+
+  /// 복습 결과 → 단어 난이도 자동 반영 토글
+  Widget _buildAutoDifficultyToggle(CabinetColors colors, CabinetTheme theme) {
+    final autoDifficultyAsync = ref.watch(autoDifficultyEnabledProvider);
+    final enabled = autoDifficultyAsync.value ?? true;
+
+    return CabinetPaperCard(
+      colors: colors,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      child: SwitchListTile(
+        contentPadding: EdgeInsets.zero,
+        title: Text('복습 결과 난이도 자동 반영', style: theme.wordTitle.copyWith(fontSize: 16)),
+        subtitle: Text(
+          '정답 시 난이도 1 하락, 오답 시 1 상승 (1~5 범위). MASTERED(난이도 ≤ 2) 집계에 자동 반영됩니다.',
+          style: theme.bodySans.copyWith(color: colors.ink3),
+        ),
+        value: enabled,
+        activeThumbColor: colors.accent,
+        onChanged: (val) async {
+          final repo = ref.read(reviewRepositoryProvider);
+          await repo.setSetting(ReviewRepository.autoDifficultySettingKey, val ? 'true' : 'false');
+          ref.invalidate(autoDifficultyEnabledProvider);
+        },
+      ),
     );
   }
 
@@ -407,13 +461,28 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 title: Text('앱 시작 시 자동 백업', style: theme.wordTitle.copyWith(fontSize: 18)),
                 subtitle: Text('로컬 스토리지에 안전하게 단어장을 보관합니다.', style: theme.bodySans),
                 value: _autoBackupEnabled,
-                activeColor: colors.accent,
+                activeThumbColor: colors.accent,
                 onChanged: (val) async {
                   final backupService = ref.read(backupServiceProvider);
                   await backupService.setAutoBackupEnabled(val);
                   setState(() => _autoBackupEnabled = val);
                 },
               ),
+              const Divider(height: 24),
+
+              Text('REVIEW REMINDER', style: theme.labelMono),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text('복습 리마인더', style: theme.wordTitle.copyWith(fontSize: 18)),
+                subtitle: Text('지정 시간에 매일 복습 알림을 보냅니다.', style: theme.bodySans),
+                value: _reminderEnabled,
+                activeThumbColor: colors.accent,
+                onChanged: (val) => _setReminderEnabled(val),
+              ),
+              if (_reminderEnabled) ...[
+                const SizedBox(height: 4),
+                _buildReminderTimeRow(colors, theme),
+              ],
               const Divider(height: 24),
 
               Text('EXPORT & IMPORT', style: theme.labelMono),
@@ -485,6 +554,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     ref.invalidate(dueReviewCardsProvider);
     ref.invalidate(reviewStatsProvider);
     ref.invalidate(hasReviewedTodayProvider);
+    ref.invalidate(masteredCountProvider);
 
     // Quiz & Matching
     ref.invalidate(quizWordsProvider);
@@ -492,6 +562,70 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
     // Home & Streak
     ref.invalidate(streakDataProvider);
+
+    // 홈 화면 위젯도 최신 데이터로 갱신 (가져오기·전체 삭제 후)
+    ref.read(homeWidgetServiceProvider).refreshWidgetData();
+  }
+
+  /// 복습 리마인더 활성화/비활성화: 설정 저장 + 예약 재구성.
+  Future<void> _setReminderEnabled(bool val) async {
+    final reminderService = ref.read(reviewReminderServiceProvider);
+    await reminderService.setReminderEnabled(val);
+    setState(() => _reminderEnabled = val);
+    if (val) {
+      await reminderService.scheduleDailyReminder();
+    } else {
+      await reminderService.cancelReminder();
+    }
+  }
+
+  /// 알림 시간 선택: TimePicker로 HH:mm 지정 후 예약 재구성.
+  Future<void> _pickReminderTime() async {
+    final parts = _reminderTime.split(':');
+    final initial = TimeOfDay(
+      hour: int.tryParse(parts.isNotEmpty ? parts[0] : '09') ?? 9,
+      minute: parts.length > 1 ? int.tryParse(parts[1]) ?? 0 : 0,
+    );
+    final picked = await showTimePicker(context: context, initialTime: initial);
+    if (picked == null) return;
+    final formatted = '${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}';
+    final reminderService = ref.read(reviewReminderServiceProvider);
+    await reminderService.setReminderTime(formatted);
+    await reminderService.scheduleDailyReminder();
+    if (mounted) {
+      setState(() => _reminderTime = formatted);
+    }
+  }
+
+  /// 알림 시간 표시 행 (탭하면 시간 선택).
+  Widget _buildReminderTimeRow(CabinetColors colors, CabinetTheme theme) {
+    return InkWell(
+      onTap: _pickReminderTime,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: colors.paper3,
+          borderRadius: BorderRadius.circular(2),
+          border: Border.all(color: colors.inkLineStrong),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('알림 시간', style: theme.labelMono.copyWith(fontSize: 9)),
+                Text(
+                  _reminderTime,
+                  style: theme.wordTitle.copyWith(fontSize: 18, color: colors.accent),
+                ),
+              ],
+            ),
+            Text('변경', style: theme.labelMono.copyWith(color: colors.accent)),
+          ],
+        ),
+      ),
+    );
   }
 
   /// 4. Stats Tab
@@ -499,7 +633,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final wordsAsync = ref.watch(wordListProvider);
     final words = wordsAsync.value ?? [];
     final totalWords = words.length;
-    final mastered = words.where((w) => w.difficulty <= 2).length;
+    // 숙달 수는 공용 프로바이더(getMasteredCount)의 단일 진실 원천을 사용한다.
+    final masteredAsync = ref.watch(masteredCountProvider);
+    final mastered = masteredAsync.value ?? 0;
+    // 숙달 진행률: 전체 수집 단어 중 숙달(난이도 ≤ 2) 비율 (대시보드 타일과 동일 형식)
+    final masteredPct = totalWords > 0 ? (mastered / totalWords * 100).round() : 0;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -524,7 +662,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   Column(
                     children: [
                       Text('MASTERED', style: theme.labelMono),
-                      Text('$mastered', style: theme.displaySerif.copyWith(fontSize: 32, color: colors.accent3)),
+                      Text(
+                        totalWords > 0
+                            ? '${formatCount(mastered)} / ${formatCount(totalWords)}'
+                            : '0',
+                        style: theme.displaySerif.copyWith(fontSize: 32, color: colors.accent3),
+                      ),
+                      if (totalWords > 0)
+                        Text(
+                          '$masteredPct% 숙달',
+                          style: theme.labelMono.copyWith(fontSize: 9, color: colors.accent3),
+                        ),
                     ],
                   ),
                 ],

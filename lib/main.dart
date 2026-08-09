@@ -18,8 +18,8 @@ void main() async {
     // Initialize database
     await DatabaseService.database;
   } catch (e, stack) {
-    print("CRITICAL DATABASE ERROR: $e");
-    print(stack);
+    debugPrint("CRITICAL DATABASE ERROR: $e");
+    debugPrint('$stack');
   }
   
   runApp(

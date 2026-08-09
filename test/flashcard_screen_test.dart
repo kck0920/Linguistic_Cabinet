@@ -8,6 +8,22 @@ import 'package:linguistic_cabinet/features/review/data/repositories/review_repo
 
 class FakeReviewRepository extends ReviewRepository {
   final List<Map<String, dynamic>> loggedReviews = [];
+  final Map<String, String> settings = {};
+
+  @override
+  Future<String?> getSetting(String key) async => settings[key];
+
+  @override
+  Future<void> setSetting(String key, String value) async {
+    settings[key] = value;
+  }
+
+  @override
+  Future<Map<String, String>> getSettings(List<String> keys) async => {
+        for (final k in keys)
+          if (settings[k] != null) k: settings[k]!,
+      };
+
 
   @override
   Future<void> logReview({

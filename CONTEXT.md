@@ -19,26 +19,32 @@ _AVOID_: vocabulary, deck
 _AVOID_: category, label
 
 **난이도 (Difficulty)**:
-단어의 난이도 레벨(1-5). 복습 스케줄 계산에 반영됨. 높은 난이도는 더 자주 반복.
+단어의 난이도 레벨(1-5). 복습 결과가 자동 반영됨: 정답은 1 하락, 오답은 1 상승 (1~5 범위 유지, ADR 0004).
+설정(`auto_difficulty`, 기본 켬)에서 끌 수 있음 — 끄면 사용자 별점 기준으로 고정.
+난이도 ≤ 2 = 숙달(MASTERED). 마스터 정원 레벨·배지는 단어 수 기준 (난이도 미반영, 비회귀).
 
 ### 학습 시스템
 
-**학습 세션 (StudySession)**:
-사용자가 플래시카드를 넘기거나 퀴즈를 푸는 행위 자체.
-_AVOID_: 복습, 연습, review
+**복습 (Review)**:
+사용자가 플래시카드를 넘기거나 퀴즈를 푸는 학습 행위 자체. 화면·탭·UI 라벨에서 '복습' 표기.
+_AVOID_: 학습 세션, study session
 
-**학습 스케줄 (StudySchedule)**:
-학습 간격을 계산하는 로직. 레이니어/고정 간격/SM-2 중 하나의 방식 적용. 단어별 오버라이드 가능.
-_AVOID_: 복습 간격, 리뷰 스케줄, review schedule
+**복습 카드 (ReviewCard)**:
+단어별 학습 스케줄을 담는 카드. `review_method`(linear/fixed/sm2)·`override_method`·`next_review_date`·SM-2 필드(`easiness_factor`/`interval`/`repetition`). `review_cards` 테이블.
+_AVOID_: 학습 스케줄, study schedule
 
-**학습 이력 (StudyLog)**:
-某 회 학습의 정답/오답 기록. 플래시카드와 퀴즈 결과가 기록됨. 매칭은 기록하지 않음.
-_AVOID_: 복습 기록, 리뷰 로그, review log
+**복습 로그 (StudyLog)**:
+개별 학습의 정답/오답 기록. `study_method`(flashcard/meaning_quiz/…)·`duration_ms`·`answer_type` 포함. `review_logs` 테이블에 저장되며 클래스명은 StudyLog.
+_AVOID_: 학습 이력, study log (클래스명 이외)
+
+**복습 저장소 (ReviewRepository)**:
+복습 카드·복습 로그·통계를 처리하는 저장소 계층. SM-2 일정 갱신(`processReviewResult`), 숙달 카운트(`getMasteredCount`), 스트릭 집계를 담당.
+_AVOID_: study repository
 
 ### 학습 방식
 
 **레이니어 (Linear)**:
-학습 스케줄 방식 중 하나. 간격 단계를 난이도에 따라 조절함. 기본: 1일→3일→7일→30일.
+학습 스케줄 방식 중 하나. 복습 횟수에 따라 간격 단계가 진행됨: 1일→3일→7일→30일.
 _AVOID_: linear review
 
 **고정 간격 (Fixed)**:
@@ -60,7 +66,7 @@ _AVOID_: card
 _AVOID_: test, exam
 
 **매칭 (Matching)**:
-카드를 뒤집어 단어-뜻 짝을 맞추는 게임. 학습 이력에 기록되지 않음.
+카드를 뒤집어 단어-뜻 짝을 맞추는 게임. 완료 시 학습 이력·복습 일정(processReviewResult)에 기록됨.
 _AVOID_: game, memory game
 
 **뜻 타이핑 (MeaningTyping)**:

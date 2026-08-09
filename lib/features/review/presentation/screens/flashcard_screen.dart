@@ -26,7 +26,7 @@ class _FlashcardScreenState extends ConsumerState<FlashcardScreen>
   int _currentIndex = 0;
   bool _isFlipped = false;
   String? _lastStamp; // 'KNOWN' or 'AGAIN'
-  FocusNode _focusNode = FocusNode();
+  final FocusNode _focusNode = FocusNode();
 
   @override
   void initState() {

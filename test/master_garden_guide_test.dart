@@ -28,12 +28,21 @@ class FakeSettingsRepository extends ReviewRepository {
   }
 
   @override
+  Future<Map<String, String>> getSettings(List<String> keys) async => {
+        for (final k in keys)
+          if (settings[k] != null) k: settings[k]!,
+      };
+
+  @override
   Future<Map<String, dynamic>> getReviewStats() async => {
         'totalWords': 0,
         'dueForReview': 0,
         'totalReviews': 0,
         'accuracy': 0,
       };
+
+  @override
+  Future<int> getMasteredCount() async => 0;
 
   @override
   Future<int> getCurrentStreakDays() async => 0;

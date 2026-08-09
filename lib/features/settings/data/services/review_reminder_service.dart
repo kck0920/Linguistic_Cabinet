@@ -1,5 +1,7 @@
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:timezone/data/latest_all.dart' as tz;
+import 'package:timezone/timezone.dart' as tz;
 import '../../../review/data/repositories/review_repository.dart';
 import '../../../review/presentation/screens/review_screen.dart';
 
@@ -8,7 +10,20 @@ class ReviewReminderService {
   final FlutterLocalNotificationsPlugin _notificationsPlugin =
       FlutterLocalNotificationsPlugin();
 
+  /// 매일 반복 복습 알림의 예약 ID (취소·재예약에 사용).
+  static const int reminderId = 100;
+
+  /// 타임존 데이터베이스 초기화 여부 (중복 초기화 방지).
+  bool _tzInitialized = false;
+
   ReviewReminderService(this._reviewRepository);
+
+  /// 타임존 초기화 (zonedSchedule에 필수 — 1회만 수행).
+  void _ensureTz() {
+    if (_tzInitialized) return;
+    tz.initializeTimeZones();
+    _tzInitialized = true;
+  }
 
   /// 알림 서비스 초기화
   Future<void> init() async {
@@ -98,6 +113,75 @@ class ReviewReminderService {
       body: '오늘 아직 학습하지 않은 단어가 있습니다. 복습을 완료해 보세요.',
       notificationDetails: notificationDetails,
     );
+  }
+
+  /// 설정에 따라 매일 반복 예약을 (재)구성한다.
+  /// 활성화면 지정 시간에 매일 알림, 비활성화면 기존 예약을 취소한다.
+  /// 예약 미지원 플랫폼(데스크톱/웹 등)은 내부에서 무시된다.
+  Future<void> scheduleDailyReminder() async {
+    try {
+      final enabled = await isReminderEnabled();
+      if (!enabled) {
+        await cancelReminder();
+        return;
+      }
+      _ensureTz();
+
+      final time = await getReminderTime(); // 'HH:mm'
+      final parts = time.split(':');
+      final hour = parts.isNotEmpty ? int.tryParse(parts[0]) ?? 9 : 9;
+      final minute = parts.length > 1 ? int.tryParse(parts[1]) ?? 0 : 0;
+
+      final now = tz.TZDateTime.now(tz.local);
+      var scheduled = tz.TZDateTime(
+        tz.local,
+        now.year,
+        now.month,
+        now.day,
+        hour,
+        minute,
+      );
+      // 이미 지난 시간이면 내일 같은 시각으로 예약
+      if (!scheduled.isAfter(now)) {
+        scheduled = scheduled.add(const Duration(days: 1));
+      }
+
+      const AndroidNotificationDetails androidDetails =
+          AndroidNotificationDetails(
+        'vocatree_reminder',
+        '복습 알림',
+        channelDescription: 'VocaTree 단어 복습 알림 채널',
+        importance: Importance.max,
+        priority: Priority.high,
+      );
+      const NotificationDetails details = NotificationDetails(
+        android: androidDetails,
+        iOS: DarwinNotificationDetails(),
+        macOS: DarwinNotificationDetails(),
+      );
+
+      await _notificationsPlugin.zonedSchedule(
+        id: reminderId,
+        title: '복습할 시간입니다!',
+        body: '오늘 아직 학습하지 않은 단어가 있습니다. 복습을 완료해 보세요.',
+        scheduledDate: scheduled,
+        notificationDetails: details,
+        androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+        // 매일 같은 시각 반복
+        matchDateTimeComponents: DateTimeComponents.time,
+      );
+    } catch (_) {
+      // 예약 미지원 플랫폼·플러그인 오류는 무시 (앱 시작 시 즉시 알림이 대신 동작)
+    }
+  }
+
+  /// 매일 반복 복습 알림 예약을 취소한다.
+  Future<void> cancelReminder() async {
+    try {
+      await _notificationsPlugin.cancel(id: reminderId);
+    } catch (_) {
+      // 미지원 플랫폼은 무시
+    }
   }
 
   /// 마스터 정원 기념일 축하 알림 (모바일 전용, 실패 시 무시).

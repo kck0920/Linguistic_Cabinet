@@ -128,6 +128,36 @@ void main() {
       expect(word.toString(), contains('hello'));
       expect(word.toString(), contains('안녕'));
     });
+
+    test('adjustedDifficultyForReview lowers difficulty on correct answer', () {
+      final word = Word(english: 'hello', korean: '안녕', difficulty: 3);
+      expect(word.adjustedDifficultyForReview(isCorrect: true), 2);
+    });
+
+    test('adjustedDifficultyForReview raises difficulty on wrong answer', () {
+      final word = Word(english: 'hello', korean: '안녕', difficulty: 3);
+      expect(word.adjustedDifficultyForReview(isCorrect: false), 4);
+    });
+
+    test('adjustedDifficultyForReview clamps to 1..5 range', () {
+      final easy = Word(english: 'hello', korean: '안녕', difficulty: 1);
+      expect(easy.adjustedDifficultyForReview(isCorrect: true), 1);
+
+      final hard = Word(english: 'hello', korean: '안녕', difficulty: 5);
+      expect(hard.adjustedDifficultyForReview(isCorrect: false), 5);
+    });
+
+    test('adjustedDifficultyForReview reflects review result without mutating', () {
+      final word = Word(english: 'hello', korean: '안녕', difficulty: 3);
+      word.adjustedDifficultyForReview(isCorrect: true);
+      expect(word.difficulty, 3); // 원본은 변경되지 않는다
+    });
+
+    test('adjustedDifficultyForReview crosses mastered boundary', () {
+      // 난이도 ≤ 2가 MASTERED 기준 — difficulty 2에서 오답 시 3으로 이탈
+      final mastered = Word(english: 'hello', korean: '안녕', difficulty: 2);
+      expect(mastered.adjustedDifficultyForReview(isCorrect: false), 3);
+    });
   });
 
   group('ReviewCard Model', () {

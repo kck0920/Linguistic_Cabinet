@@ -1,7 +1,10 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../words/data/models/word.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../review/presentation/screens/review_screen.dart';
+import '../../../achievements/data/achievement_evaluator.dart';
 
 class WordMatchingScreen extends ConsumerStatefulWidget {
   final List<Word> words;
@@ -137,7 +140,35 @@ class _WordMatchingScreenState extends ConsumerState<WordMatchingScreen>
     }
   }
 
-  void _showCompletionDialog() {
+  /// 매칭 완료 시 각 매칭 쌍 단어를 복습 로그로 기록하고 복습 일정에 반영한다.
+  /// (같은 단어는 word/meaning 카드 2장이므로 중복 없이 1회만 기록)
+  /// 퀴즈와 동일하게 logReview + processReviewResult(일정 갱신)를 함께 호출한다.
+  Future<void> _logMatchedWords() async {
+    final repo = ref.read(reviewRepositoryProvider);
+    final loggedIds = <String>{};
+    for (final card in _cards) {
+      if (!card.isMatched) continue;
+      if (!loggedIds.add(card.word.id)) continue;
+      await repo.logReview(
+        wordId: card.word.id,
+        isCorrect: true,
+        studyMethod: 'word_matching',
+      );
+      await repo.processReviewResult(
+        wordId: card.word.id,
+        isCorrect: true,
+      );
+    }
+    // 기록 직후 업적을 즉시 평가한다 (재시작 없이 해금/토스트, fire-and-forget).
+    unawaited(ref.read(achievementEvaluatorProvider).evaluateNow());
+  }
+
+  Future<void> _showCompletionDialog() async {
+    // 로깅 실패가 완료 다이얼로그를 막지 않도록 격리한다.
+    try {
+      await _logMatchedWords();
+    } catch (_) {}
+    if (!mounted) return;
     showDialog(
       context: context,
       barrierDismissible: false,

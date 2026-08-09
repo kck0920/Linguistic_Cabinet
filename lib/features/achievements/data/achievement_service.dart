@@ -24,6 +24,14 @@ final achievementStatusesProvider = FutureProvider<List<AchievementStatus>>(
   },
 );
 
+/// 업적 평가 지표 묶음 (단어 수·숙달 단어 수·현재 스트릭·연도 무관 월별 최대 학습일).
+typedef AchievementMetrics = ({
+  int totalWords,
+  int masteredCount,
+  int streak,
+  Map<int, int> monthly,
+});
+
 /// 업적 컬렉션 정의: 모든 업적의 단일 진실 원천.
 class AchievementService {
   final ReviewRepository _reviewRepository;
@@ -33,7 +41,7 @@ class AchievementService {
   /// 월간 업적 공통 임계값: 해당 달에 20일 이상 학습
   static const int monthlyThreshold = 20;
 
-  /// 업적 정의 목록 (항상 이 순서로 표시된다: 수집 → 스트릭 → 월간 → 마스터).
+  /// 업적 정의 목록 (항상 이 순서로 표시된다: 수집 → 숙달 → 스트릭 → 월간 → 마스터).
   static const List<Achievement> achievements = [
     // ── 단어 수집 ─────────────────────────────────────────────────
     Achievement(
@@ -62,6 +70,36 @@ class AchievementService {
       threshold: 1000,
       color: Color(0xFF6F5A44),
       category: AchievementCategory.word,
+    ),
+
+    // ── 단어 숙달 (난이도 ≤ 2) ────────────────────────────────────
+    // 복습 결과가 난이도에 자동 반영되어, 학습 성과가 숙달로 이어진다.
+    Achievement(
+      key: 'achv_mastered_50',
+      title: 'Mastered 50',
+      description: '50개의 단어를 숙달하세요 (난이도 1~2)',
+      icon: Icons.verified_outlined,
+      threshold: 50,
+      color: Color(0xFF3D7A5A),
+      category: AchievementCategory.mastered,
+    ),
+    Achievement(
+      key: 'achv_mastered_200',
+      title: 'Mastered 200',
+      description: '200개의 단어를 숙달하세요 (난이도 1~2)',
+      icon: Icons.verified,
+      threshold: 200,
+      color: Color(0xFF2E6B4F),
+      category: AchievementCategory.mastered,
+    ),
+    Achievement(
+      key: 'achv_mastered_500',
+      title: 'Mastered 500',
+      description: '500개의 단어를 숙달하세요 (난이도 1~2)',
+      icon: Icons.workspace_premium_outlined,
+      threshold: 500,
+      color: Color(0xFFB8562D),
+      category: AchievementCategory.mastered,
     ),
 
     // ── 연속 학습 (스트릭) ─────────────────────────────────────────
@@ -285,14 +323,19 @@ class AchievementService {
   ];
 
   /// 업적 평가에 필요한 현재 지표를 한 번에 조회한다.
-  /// (단어 수·현재 스트릭·연도 무관 월별 최대 학습일)
-  Future<({int totalWords, int streak, Map<int, int> monthly})>
-      _currentMetrics() async {
+  /// (단어 수·숙달 단어 수·현재 스트릭·연도 무관 월별 최대 학습일)
+  Future<AchievementMetrics> _currentMetrics() async {
     final stats = await _reviewRepository.getReviewStats();
     final totalWords = stats['totalWords'] as int? ?? 0;
+    final masteredCount = await _reviewRepository.getMasteredCount();
     final streak = await _reviewRepository.getCurrentStreakDays();
     final monthly = await _reviewRepository.getMonthlyStudyDayCounts();
-    return (totalWords: totalWords, streak: streak, monthly: monthly);
+    return (
+      totalWords: totalWords,
+      masteredCount: masteredCount,
+      streak: streak,
+      monthly: monthly,
+    );
   }
 
   /// 카테고리 표시 라벨 (컬렉션 섹션·상세 화면 공용 — 단일 진실 원천).
@@ -300,6 +343,8 @@ class AchievementService {
     switch (category) {
       case AchievementCategory.word:
         return 'COLLECTED WORDS · 단어 수집';
+      case AchievementCategory.mastered:
+        return 'MASTERED WORDS · 단어 숙달';
       case AchievementCategory.streak:
         return 'STREAK · 연속 학습';
       case AchievementCategory.monthly:
@@ -323,6 +368,7 @@ class AchievementService {
   static int currentFor(
     Achievement a, {
     required int totalWords,
+    required int masteredCount,
     required int streak,
     required Map<int, int> monthly,
   }) {
@@ -330,6 +376,8 @@ class AchievementService {
       case AchievementCategory.word:
       case AchievementCategory.master:
         return totalWords;
+      case AchievementCategory.mastered:
+        return masteredCount;
       case AchievementCategory.streak:
         return streak;
       case AchievementCategory.monthly:
@@ -341,22 +389,32 @@ class AchievementService {
       '${d.year}-${d.month.toString().padLeft(2, '0')}-'
       '${d.day.toString().padLeft(2, '0')}';
 
+  /// 업적 키 전체를 한 번에 조회한다 (루프 내 개별 쿼리 N회 → 1회 배치).
+  /// 반환 맵: key → 수여 날짜 문자열(YYYY-MM-DD) 또는 null.
+  Future<Map<String, String?>> _fetchAchievedDates() async {
+    final keys = achievements.map((a) => a.key).toList();
+    final saved = await _reviewRepository.getSettings(keys);
+    return {for (final a in achievements) a.key: saved[a.key]};
+  }
+
   /// 저장된 모든 업적 날짜를 읽어 상태 목록을 만든다.
   /// 각 상태에는 현재 진행 값([AchievementStatus.current])이 포함된다
   /// (카드의 프로그레스 바 표시용). [metrics]를 주면 재조회를 건너뛴다.
   Future<List<AchievementStatus>> getStatuses({
-    ({int totalWords, int streak, Map<int, int> monthly})? metrics,
+    AchievementMetrics? metrics,
   }) async {
     final m = metrics ?? await _currentMetrics();
+    final achievedDates = await _fetchAchievedDates();
     final statuses = <AchievementStatus>[];
     for (final a in achievements) {
-      final dateStr = await _reviewRepository.getSetting(a.key);
+      final dateStr = achievedDates[a.key];
       statuses.add(AchievementStatus(
         achievement: a,
         achievedOn: dateStr != null ? DateTime.tryParse(dateStr) : null,
         current: currentFor(
           a,
           totalWords: m.totalWords,
+          masteredCount: m.masteredCount,
           streak: m.streak,
           monthly: m.monthly,
         ),
@@ -380,18 +438,20 @@ class AchievementService {
   Future<List<Achievement>> evaluateAndAward({DateTime? now}) async {
     final current = now ?? DateTime.now();
     final m = await _currentMetrics();
+    // 수여 여부를 배치로 한 번에 조회한다 (루프 내 개별 쿼리 제거).
+    final achievedDates = await _fetchAchievedDates();
     final awarded = <Achievement>[];
     for (final a in achievements) {
-      // awardIfNotEarned가 이미 수여 여부를 확인하므로 (중복 수여 방지)
-      // 여기서는 조건 충족 여부만 평가하고 수여는 서비스에 위임한다.
       final progressValue = currentFor(
         a,
         totalWords: m.totalWords,
+        masteredCount: m.masteredCount,
         streak: m.streak,
         monthly: m.monthly,
       );
-      if (progressValue >= a.threshold &&
-          await awardIfNotEarned(a.key, current)) {
+      // 조건 충족 + 아직 미수여 → 저장
+      if (progressValue >= a.threshold && achievedDates[a.key] == null) {
+        await _reviewRepository.setSetting(a.key, _dateStr(current));
         awarded.add(a);
       }
     }
@@ -403,19 +463,21 @@ class AchievementService {
   Future<List<AchievementStatus>> evaluateAndGetStatuses({DateTime? now}) async {
     final m = await _currentMetrics();
     final current = now ?? DateTime.now();
+    // 수여 여부를 배치로 한 번에 조회한다 (루프 내 개별 쿼리 제거).
+    final achievedDates = await _fetchAchievedDates();
     final statuses = <AchievementStatus>[];
     for (final a in achievements) {
       final progressValue = currentFor(
         a,
         totalWords: m.totalWords,
+        masteredCount: m.masteredCount,
         streak: m.streak,
         monthly: m.monthly,
       );
-      var dateStr = await _reviewRepository.getSetting(a.key);
+      var dateStr = achievedDates[a.key];
       if (dateStr == null && progressValue >= a.threshold) {
-        if (await awardIfNotEarned(a.key, current)) {
-          dateStr = _dateStr(current);
-        }
+        await _reviewRepository.setSetting(a.key, _dateStr(current));
+        dateStr = _dateStr(current);
       }
       statuses.add(AchievementStatus(
         achievement: a,

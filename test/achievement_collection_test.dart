@@ -31,12 +31,21 @@ class FakeSettingsRepository extends ReviewRepository {
   }
 
   @override
+  Future<Map<String, String>> getSettings(List<String> keys) async => {
+        for (final k in keys)
+          if (settings[k] != null) k: settings[k]!,
+      };
+
+  @override
   Future<Map<String, dynamic>> getReviewStats() async => {
         'totalWords': 0,
         'dueForReview': 0,
         'totalReviews': 0,
         'accuracy': 0,
       };
+
+  @override
+  Future<int> getMasteredCount() async => 0;
 
   @override
   Future<int> getCurrentStreakDays() async => 0;
@@ -64,13 +73,14 @@ void main() {
       );
       await pumpCollection(tester);
 
-      // 헤더와 진행도 (전체 25개)
+      // 헤더와 진행도 (전체 28개)
       expect(find.text('ACHIEVEMENTS'), findsOneWidget);
       expect(find.text('Achievement Collection'), findsOneWidget);
-      expect(find.text('1 / 25'), findsOneWidget);
+      expect(find.text('1 / 28'), findsOneWidget);
 
       // 카테고리 섹션 라벨
       expect(find.text('COLLECTED WORDS · 단어 수집'), findsOneWidget);
+      expect(find.text('MASTERED WORDS · 단어 숙달'), findsOneWidget);
       expect(find.text('STREAK · 연속 학습'), findsOneWidget);
       expect(find.text('MONTHLY CHALLENGE · 월간 도전'), findsOneWidget);
       expect(find.text('MASTER · 정원'), findsOneWidget);
@@ -81,6 +91,9 @@ void main() {
       expect(find.text('ACHIEVED'), findsNothing); // 스탬프 없음 (배지 색상으로 해금 표시)
 
       // 새로 추가된 업적도 목록에 있다
+      expect(find.text('Mastered 50'), findsOneWidget);
+      expect(find.text('Mastered 200'), findsOneWidget);
+      expect(find.text('Mastered 500'), findsOneWidget);
       expect(find.text('Streak 10'), findsOneWidget);
       expect(find.text('Streak 100'), findsOneWidget);
       expect(find.text('January Study'), findsOneWidget);
@@ -95,16 +108,16 @@ void main() {
       // 해금 배지는 진행률 대신 달성 날짜를 표시한다
       expect(find.text('0 / 1단어'), findsNothing); // First Word는 해금됨
 
-      // 배지 렌더링: 상단 진행바(Linear) 1개 + 배지별 진행 링(Circular) 25개
+      // 배지 렌더링: 상단 진행바(Linear) 1개 + 배지별 진행 링(Circular) 28개
       expect(find.byType(LinearProgressIndicator), findsOneWidget);
-      expect(find.byType(CircularProgressIndicator), findsNWidgets(25));
+      expect(find.byType(CircularProgressIndicator), findsNWidgets(28));
 
       // 해금 배지(First Word)에만 스파클이 렌더링된다
       expect(find.byType(CabinetSparkle), findsOneWidget);
 
-      // 미해금 배지(24개)에만 잠금 뱃지가 표시된다
-      expect(find.byType(CabinetLockBadge), findsNWidgets(24));
-      expect(find.byIcon(Icons.lock_outline), findsNWidgets(24));
+      // 미해금 배지(27개)에만 잠금 뱃지가 표시된다
+      expect(find.byType(CabinetLockBadge), findsNWidgets(27));
+      expect(find.byIcon(Icons.lock_outline), findsNWidgets(27));
 
       expect(tester.takeException(), isNull);
     });

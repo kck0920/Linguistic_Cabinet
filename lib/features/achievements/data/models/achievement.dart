@@ -5,6 +5,9 @@ enum AchievementCategory {
   /// 단어 수집 (First Word, Collector...)
   word,
 
+  /// 단어 숙달 (Mastered 50/200/500 — 난이도 ≤ 2)
+  mastered,
+
   /// 연속 학습 (Streak 10~100)
   streak,
 
@@ -31,7 +34,8 @@ class Achievement {
   /// 진행 표시 단위 (단어 수 계열은 '단어', 그 외는 '일').
   String get progressUnit =>
       (category == AchievementCategory.word ||
-              category == AchievementCategory.master)
+              category == AchievementCategory.master ||
+              category == AchievementCategory.mastered)
           ? '단어'
           : '일';
 

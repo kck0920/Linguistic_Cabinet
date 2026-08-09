@@ -6,18 +6,34 @@ import 'package:linguistic_cabinet/features/achievements/data/models/achievement
 import 'package:linguistic_cabinet/features/review/data/repositories/review_repository.dart';
 
 /// 평가용 가짜 리포: 통계를 메모리 값으로 주입한다.
+/// [getSettingCalls]/[getSettingsCalls] 카운터로 개별 조회 vs 배치 조회를 검증한다.
 class FakeAchievementRepo extends ReviewRepository {
   final Map<String, String> settings = {};
   int wordCount = 0;
+  int masteredCount = 0;
   int streak = 0;
   Map<int, int> monthly = {};
+  int getSettingCalls = 0;
+  int getSettingsCalls = 0;
 
   @override
-  Future<String?> getSetting(String key) async => settings[key];
+  Future<String?> getSetting(String key) async {
+    getSettingCalls++;
+    return settings[key];
+  }
 
   @override
   Future<void> setSetting(String key, String value) async {
     settings[key] = value;
+  }
+
+  @override
+  Future<Map<String, String>> getSettings(List<String> keys) async {
+    getSettingsCalls++;
+    return {
+      for (final k in keys)
+        if (settings[k] != null) k: settings[k]!,
+    };
   }
 
   @override
@@ -27,6 +43,9 @@ class FakeAchievementRepo extends ReviewRepository {
         'totalReviews': 0,
         'accuracy': 0,
       };
+
+  @override
+  Future<int> getMasteredCount() async => masteredCount;
 
   @override
   Future<int> getCurrentStreakDays() async => streak;
@@ -229,9 +248,47 @@ void main() {
       );
     });
 
-    test('업적 정의: 총 25개, 스트릭 9개 + 월간 12개 구성', () {
+    test('숙달 60단어면 Mastered 50만 수여한다 (200·500 미충족)', () async {
+      final repo = FakeAchievementRepo()..masteredCount = 60;
+      final service = AchievementService(repo);
+
+      final awarded = await service.evaluateAndAward(now: now);
+
+      expect(repo.settings['achv_mastered_50'], isNotNull);
+      expect(repo.settings['achv_mastered_200'], isNull);
+      expect(repo.settings['achv_mastered_500'], isNull);
+      expect(awarded.length, 1);
+    });
+
+    test('숙달 500단어면 Mastered 50·200·500이 모두 수여된다 (경계)', () async {
+      final repo = FakeAchievementRepo()..masteredCount = 500;
+      final service = AchievementService(repo);
+
+      final awarded = await service.evaluateAndAward(now: now);
+
+      expect(repo.settings['achv_mastered_50'], isNotNull);
+      expect(repo.settings['achv_mastered_200'], isNotNull);
+      expect(repo.settings['achv_mastered_500'], isNotNull);
+      expect(awarded.length, 3);
+    });
+
+    test('숙달 정확히 50단어면 Mastered 50이 수여된다 (>= 경계)', () async {
+      final repo = FakeAchievementRepo()..masteredCount = 50;
+      final service = AchievementService(repo);
+
+      await service.evaluateAndAward(now: now);
+
+      expect(repo.settings['achv_mastered_50'], isNotNull);
+      expect(repo.settings['achv_mastered_200'], isNull);
+    });
+
+    test('업적 정의: 총 28개, 숙달 3개 + 스트릭 9개 + 월간 12개 구성', () {
       final all = AchievementService.achievements;
-      expect(all.length, 25);
+      expect(all.length, 28);
+      expect(
+        all.where((a) => a.category == AchievementCategory.mastered).length,
+        3,
+      );
       expect(
         all.where((a) => a.category == AchievementCategory.streak).length,
         9,
@@ -246,6 +303,51 @@ void main() {
         ),
         isTrue,
       );
+    });
+
+    test('수여 상태는 배치 조회(getSettings) 1회로 읽는다 (개별 getSetting 회피)',
+        () async {
+      final repo = FakeAchievementRepo()
+        ..streak = 25
+        ..settings['achv_streak_10'] = '2026-01-01';
+      final service = AchievementService(repo);
+
+      await service.evaluateAndAward(now: now);
+
+      // 새로 수여된 업적은 저장된다.
+      expect(repo.settings['achv_streak_20'], '2026-08-07');
+      expect(repo.settings['achv_streak_30'], isNull); // 30 미충족
+      // 기존 수여(10일)는 유지된다.
+      expect(repo.settings['achv_streak_10'], '2026-01-01');
+      // 배치 최적화 검증: 개별 getSetting 0회, getSettings 1회
+      expect(repo.getSettingsCalls, 1);
+      expect(repo.getSettingCalls, 0);
+    });
+
+    test('getStatuses도 배치 조회 1회만 사용한다', () async {
+      final repo = FakeAchievementRepo()
+        ..streak = 12
+        ..settings['achv_streak_10'] = '2026-01-01';
+      final service = AchievementService(repo);
+
+      final statuses = await service.getStatuses();
+
+      expect(statuses.length, 28);
+      // 10일 업적은 기존 날짜 유지, 20일은 미충족
+      expect(
+        statuses
+            .firstWhere((s) => s.achievement.key == 'achv_streak_10')
+            .achievedOn,
+        DateTime.parse('2026-01-01'),
+      );
+      expect(
+        statuses
+            .firstWhere((s) => s.achievement.key == 'achv_streak_20')
+            .achievedOn,
+        isNull,
+      );
+      expect(repo.getSettingsCalls, 1);
+      expect(repo.getSettingCalls, 0);
     });
   });
 }

@@ -30,6 +30,22 @@ class DatabaseService {
     _testDatabase = null;
   }
 
+  /// 통합 테스트용: 실제 파일 DB(vocatree.db)를 건드리지 않고
+  /// 인메모리 DB로 스키마를 초기화해 테스트 DB로 지정한다.
+  /// (Linux 데스크톱 등 dart:io 환경에서 사용 — 통합 테스트 전용)
+  /// 호출 전에 `databaseFactory`가 sqflite_common_ffi의 ffi 팩토리로
+  /// 설정되어 있어야 한다 (main.dart와 동일한 초기화).
+  static Future<void> setTestDatabaseInMemory() async {
+    final db = await databaseFactory.openDatabase(
+      inMemoryDatabasePath,
+      options: OpenDatabaseOptions(
+        version: _dbVersion,
+        onCreate: _createDatabase,
+      ),
+    );
+    _testDatabase = db;
+  }
+
   static Future<void> _addColumnSafe(Database db, String table, String column, String type, {String? defaultValue}) async {
     try {
       final defaultClause = defaultValue != null ? ' DEFAULT $defaultValue' : '';

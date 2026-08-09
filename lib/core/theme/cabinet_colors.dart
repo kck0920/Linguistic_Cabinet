@@ -183,7 +183,6 @@ class CabinetColors {
           brutalShadow: Color(0xFF000000),
         );
       case CabinetThemeMode.sepia:
-      default:
         return const CabinetColors(
           mode: CabinetThemeMode.sepia,
           paper: Color(0xFFF1E8D5),

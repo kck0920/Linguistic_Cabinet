@@ -9,6 +9,7 @@ import '../../../../core/theme/cabinet_theme.dart';
 import '../../../../shared/widgets/cabinet_widgets.dart';
 import 'flashcard_screen.dart';
 import '../../../../home/home_dashboard_screen.dart';
+import '../../../settings/data/services/home_widget_service.dart';
 
 final reviewRepositoryProvider = Provider<ReviewRepository>((ref) => ReviewRepository());
 
@@ -25,6 +26,20 @@ final reviewStatsProvider = FutureProvider<Map<String, dynamic>>((ref) async {
 final hasReviewedTodayProvider = FutureProvider<bool>((ref) async {
   final repo = ref.watch(reviewRepositoryProvider);
   return repo.hasReviewedToday();
+});
+
+/// 숙달(Mastered) 단어 수: 난이도 ≤ 2 (복습 결과가 자동 반영됨).
+/// 대시보드·설정·수료증이 공용으로 사용하는 단일 진실 원천
+/// (각 화면의 인메모리 `words.where(difficulty <= 2)` 계산을 대체).
+final masteredCountProvider = FutureProvider<int>((ref) async {
+  final repo = ref.watch(reviewRepositoryProvider);
+  return repo.getMasteredCount();
+});
+
+/// 홈 화면 위젯 스냅샷 갱신 서비스 (모바일 전용, 미지원 플랫폼은 내부 무시).
+final homeWidgetServiceProvider = Provider<HomeWidgetService>((ref) {
+  final repo = ref.watch(reviewRepositoryProvider);
+  return HomeWidgetService(repo);
 });
 
 class ReviewScreen extends ConsumerStatefulWidget {
@@ -88,7 +103,7 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
                   return hasReviewedTodayAsync.when(
                     data: (hasReviewed) => _buildEmptyState(context, hasReviewed, colors, theme),
                     loading: () => Center(child: CircularProgressIndicator(color: colors.accent)),
-                    error: (_, __) => _buildEmptyState(context, false, colors, theme),
+                    error: (_, _) => _buildEmptyState(context, false, colors, theme),
                   );
                 }
 

@@ -69,6 +69,13 @@ class Word {
     );
   }
 
+  /// 복습 결과(정답/오답)를 난이도에 반영한 새 값을 반환한다.
+  /// 정답이면 1 낮추고, 오답이면 1 올린다 (1~5 범위 유지).
+  int adjustedDifficultyForReview({required bool isCorrect}) {
+    final delta = isCorrect ? -1 : 1;
+    return (difficulty + delta).clamp(1, 5);
+  }
+
   Word copyWith({
     String? english,
     String? korean,

@@ -30,6 +30,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
     _triggerAutoBackup();
     _checkReviewReminder();
     _checkAnniversary();
+    _refreshHomeWidget();
   }
 
   @override
@@ -43,6 +44,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
     if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
       _triggerAutoBackup();
     }
+  }
+
+  /// 홈 화면 위젯 스냅샷 최신화 (모바일 전용, 미지원 플랫폼은 내부 무시).
+  Future<void> _refreshHomeWidget() async {
+    try {
+      await ref.read(homeWidgetServiceProvider).refreshWidgetData();
+    } catch (_) {}
   }
 
   Future<void> _triggerAutoBackup() async {
@@ -59,6 +67,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with WidgetsBindingObse
     try {
       final reminderService = ref.read(reviewReminderServiceProvider);
       await reminderService.init();
+      // 지정 시간 매일 반복 예약 재구성 (설정 변경·재부팅 후에도 유지)
+      await reminderService.scheduleDailyReminder();
+      // 즉시 알림: 앱을 켰을 때 오늘 미복습 + 복습 대상이 있으면 바로 안내
       final shouldShow = await reminderService.shouldShowReminder();
       if (shouldShow && mounted) {
         await reminderService.showNotification();

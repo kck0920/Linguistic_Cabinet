@@ -10,6 +10,7 @@ import 'achievement_detail_screen.dart';
 /// 컬렉션 화면 섹션 순서 (라벨은 [AchievementService.categoryLabel] 공용 사용).
 const List<AchievementCategory> _sectionOrder = [
   AchievementCategory.word,
+  AchievementCategory.mastered,
   AchievementCategory.streak,
   AchievementCategory.monthly,
   AchievementCategory.master,

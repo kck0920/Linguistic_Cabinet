@@ -6,12 +6,15 @@ plugins {
 
 android {
     namespace = "com.vocatree.vocatree"
-    compileSdk = flutter.compileSdkVersion
+    // file_picker가 android-36 이상의 compileSdk를 요구한다.
+    compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        // flutter_local_notifications 22.x가 요구하는 core library desugaring
+        isCoreLibraryDesugaringEnabled = true
     }
 
     defaultConfig {
@@ -32,6 +35,10 @@ android {
             signingConfig = signingConfigs.getByName("debug")
         }
     }
+}
+
+dependencies {
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 }
 
 kotlin {

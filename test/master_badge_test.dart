@@ -16,6 +16,12 @@ class FakeSettingsRepository extends ReviewRepository {
   Future<void> setSetting(String key, String value) async {
     settings[key] = value;
   }
+
+  @override
+  Future<Map<String, String>> getSettings(List<String> keys) async => {
+        for (final k in keys)
+          if (settings[k] != null) k: settings[k]!,
+      };
 }
 
 void main() {

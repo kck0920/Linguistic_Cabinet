@@ -40,8 +40,9 @@ class MasterGardenCertificateScreen extends ConsumerWidget {
         statsAsync.value ?? {'totalReviews': 0, 'currentStreak': 0};
 
     final totalWords = words.length;
-    final mastered =
-        words.where((w) => w.difficulty <= 2).length;
+    // 숙달 수는 공용 프로바이더(getMasteredCount)의 단일 진실 원천을 사용한다.
+    final masteredAsync = ref.watch(masteredCountProvider);
+    final mastered = masteredAsync.value ?? 0;
     final streak = stats['currentStreak'] ?? 0;
     final reviews = stats['totalReviews'] ?? 0;
 

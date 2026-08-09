@@ -22,6 +22,12 @@ class FakeSettingsRepository extends ReviewRepository {
   Future<void> setSetting(String key, String value) async {
     settings[key] = value;
   }
+
+  @override
+  Future<Map<String, String>> getSettings(List<String> keys) async => {
+        for (final k in keys)
+          if (settings[k] != null) k: settings[k]!,
+      };
 }
 
 Future<void> _pumpCertificate(
@@ -43,6 +49,10 @@ Future<void> _pumpCertificate(
           (ref) async => {'totalReviews': 42, 'currentStreak': 7},
         ),
         wordListProvider.overrideWith((ref) async => words),
+        // 숙달 수는 화면이 공용 프로바이더를 쓰므로, 단어 목록 기준으로 동일하게 주입
+        masteredCountProvider.overrideWith(
+          (ref) async => words.where((w) => w.difficulty <= 2).length,
+        ),
       ],
       child: MaterialApp(
         home: const MasterGardenCertificateScreen(),
@@ -114,6 +124,9 @@ void main() {
               (ref) async => {'totalReviews': 42, 'currentStreak': 7},
             ),
             wordListProvider.overrideWith((ref) async => words),
+            masteredCountProvider.overrideWith(
+              (ref) async => words.where((w) => w.difficulty <= 2).length,
+            ),
           ],
           child: MaterialApp(
             home: const MasterGardenCertificateScreen(),

@@ -5,6 +5,9 @@ import '../../../../shared/services/database_service.dart';
 import '../../../words/data/repositories/word_repository.dart';
 
 class ReviewRepository {
+  /// 복습 결과 → 단어 난이도 자동 반영 설정 키 (값 'false'면 비활성, 기본 활성).
+  static const String autoDifficultySettingKey = 'auto_difficulty';
+
   Future<String?> getSetting(String key) async {
     final db = await DatabaseService.database;
     final List<Map<String, dynamic>> maps = await db.query(
@@ -23,6 +26,22 @@ class ReviewRepository {
       {'key': key, 'value': value},
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
+  }
+
+  /// 여러 설정을 한 번에 조회한다 (업적 수여 루프 등에서 개별 쿼리를
+  /// N번 날리는 대신 `WHERE key IN (...)` 한 번으로 처리해 성능을 개선).
+  Future<Map<String, String>> getSettings(List<String> keys) async {
+    if (keys.isEmpty) return {};
+    final db = await DatabaseService.database;
+    final placeholders = List.filled(keys.length, '?').join(', ');
+    final List<Map<String, dynamic>> maps = await db.query(
+      'settings',
+      where: 'key IN ($placeholders)',
+      whereArgs: keys,
+    );
+    return {
+      for (final row in maps) row['key'] as String: row['value'] as String,
+    };
   }
   Future<List<ReviewCard>> getAllReviewCards() async {
     final db = await DatabaseService.database;
@@ -161,16 +180,45 @@ class ReviewRepository {
   }
 
   /// 복습 결과에 따라 설정된 activeMethod 기반으로 리뷰카드 업데이트
+  /// 하고, 복습 결과(정답/오답)를 단어 난이도에 자동 반영한다.
   Future<void> processReviewResult({
     required String wordId,
     required bool isCorrect,
     int quality = 4,
   }) async {
     final card = await getReviewCardByWordId(wordId);
-    if (card == null) return;
-    
-    final updatedCard = card.processReviewResult(isCorrect: isCorrect, quality: quality);
-    await updateReviewCard(updatedCard);
+    if (card != null) {
+      final updatedCard = card.processReviewResult(isCorrect: isCorrect, quality: quality);
+      await updateReviewCard(updatedCard);
+    }
+
+    // 복습 결과를 단어 난이도에 자동 반영 (정답 -1, 오답 +1, 1~5 범위).
+    // 설정 'auto_difficulty'가 'false'면 비활성화 (기본: 설정 없음 = 활성화).
+    // 난이도 갱신은 2차 부수 효과이므로, 실패해도 복습 기록 경로를 막지 않도록
+    // 격리한다. 카드 존재 여부와도 독립적으로 처리한다.
+    try {
+      final setting = await getSetting(ReviewRepository.autoDifficultySettingKey);
+      final enabled = setting == null || setting != 'false';
+      if (enabled) {
+        await _applyReviewToDifficulty(wordId: wordId, isCorrect: isCorrect);
+      }
+    } catch (_) {
+      // 복습 카드 갱신은 이미 완료 — 난이도 반영 실패는 무시한다.
+    }
+  }
+
+  /// 복습 결과(정답/오답)를 해당 단어의 난이도에 반영한다.
+  /// 정답이면 난이도를 1 낮추고(숙달), 오답이면 1 올린다(어려움). 1~5 범위 유지.
+  Future<void> _applyReviewToDifficulty({
+    required String wordId,
+    required bool isCorrect,
+  }) async {
+    final wordRepo = WordRepository();
+    final word = await wordRepo.getWordById(wordId);
+    if (word == null) return;
+    final adjusted = word.adjustedDifficultyForReview(isCorrect: isCorrect);
+    if (adjusted == word.difficulty) return;
+    await wordRepo.updateWord(word.copyWith(difficulty: adjusted));
   }
 
   /// 리뷰카드가 없는 단어들을 찾아서 자동으로 생성
@@ -245,6 +293,16 @@ class ReviewRepository {
       'totalReviews': reviewCount,
       'accuracy': reviewCount > 0 ? (correctCount / reviewCount * 100).round() : 0,
     };
+  }
+
+  /// 숙달(Mastered) 단어 수: 난이도 ≤ 2인 단어 개수.
+  /// 복습 결과 난이도 자동 반영(auto_difficulty)과 연동되어,
+  /// 마스터드 업적(Mastered 50/200/500)·LEDGER SUMMARY 집계에 사용된다.
+  Future<int> getMasteredCount() async {
+    final db = await DatabaseService.database;
+    final result =
+        await db.rawQuery('SELECT COUNT(*) as count FROM words WHERE difficulty <= 2');
+    return result.first['count'] as int;
   }
 
   /// 최근 182일간의 실제 학습 스트릭 잔디 데이터 (0~4 level)
