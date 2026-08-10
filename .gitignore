@@ -49,3 +49,4 @@ design_handoff_cabinet_word_app
 .freebuff/
 .vercel
 .env*
+lib/shared/services/oauth_credentials.dart

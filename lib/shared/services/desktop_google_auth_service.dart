@@ -6,6 +6,7 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
+import 'oauth_credentials.dart';
 
 class DesktopGoogleAccount {
   final String id;
@@ -32,7 +33,8 @@ class DesktopGoogleAuthService {
   factory DesktopGoogleAuthService() => _instance;
   DesktopGoogleAuthService._internal();
 
-  static const String clientId = '1002909356316-gmvaad67pf9piq2q3n5co16124pb12ir.apps.googleusercontent.com';
+  static const String clientId = OAuthCredentials.clientId;
+  static const String clientSecret = OAuthCredentials.clientSecret;
   static const List<String> scopes = [
     'email',
     'profile',
@@ -114,11 +116,12 @@ class DesktopGoogleAuthService {
         throw Exception('No auth code received from Google');
       }
 
-      // 4. Auth Code를 Access Token으로 교환 (PKCE code_verifier 포함)
+      // 4. Auth Code를 Access Token으로 교환 (PKCE code_verifier 및 client_secret 포함)
       final tokenResponse = await http.post(
         Uri.parse('https://oauth2.googleapis.com/token'),
         body: {
           'client_id': clientId,
+          'client_secret': clientSecret,
           'code': code,
           'grant_type': 'authorization_code',
           'redirect_uri': redirectUri,
