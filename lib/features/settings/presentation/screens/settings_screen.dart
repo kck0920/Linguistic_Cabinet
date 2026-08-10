@@ -826,8 +826,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 }
               } catch (e) {
                 if (mounted) {
+                  final errStr = e.toString();
+                  final errMsg = (errStr.contains('appClientId != null') || errStr.contains('ClientId not set'))
+                      ? 'Google OAuth Client ID 설정이 필요합니다. (Google Cloud Console 발급 필요)'
+                      : 'Google 로그인 실패: $e';
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Google 로그인 실패: $e')),
+                    SnackBar(content: Text(errMsg)),
                   );
                 }
               }

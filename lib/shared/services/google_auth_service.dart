@@ -12,9 +12,13 @@ class GoogleAuthService {
     'https://www.googleapis.com/auth/drive.appdata',
   ];
 
-  final GoogleSignIn _googleSignIn = GoogleSignIn(
-    scopes: _scopes,
-  );
+  /// Web/Desktop 환경용 OAuth Client ID
+  static String? customClientId = '1002909356316-llhqdfguevm9je83uhtdqblgm5621ra1.apps.googleusercontent.com';
+
+  GoogleSignIn get _googleSignIn => GoogleSignIn(
+        clientId: customClientId,
+        scopes: _scopes,
+      );
 
   GoogleSignInAccount? get currentUser => _googleSignIn.currentUser;
   Stream<GoogleSignInAccount?> get onCurrentUserChanged => _googleSignIn.onCurrentUserChanged;
