@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/cabinet_colors.dart';
@@ -57,6 +58,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _reminderEnabled = false;
   String _reminderTime = '09:00';
   bool _isGoogleSyncing = false;
+  StreamSubscription<GoogleAuthUser?>? _authSub;
 
   @override
   void initState() {
@@ -64,6 +66,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     _loadAutoBackupSetting();
     _loadReminderSetting();
     _trySilentSignInGoogle();
+    _authSub = GoogleAuthService().onCurrentUserChanged.listen((account) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _authSub?.cancel();
+    super.dispose();
   }
 
   Future<void> _trySilentSignInGoogle() async {
@@ -797,12 +808,27 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             Text('GOOGLE DRIVE SYNC', style: theme.labelMono),
             if (user != null)
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
                   color: colors.accent.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: colors.accent.withValues(alpha: 0.4), width: 0.8),
                 ),
-                child: Text('연결됨', style: theme.labelMono.copyWith(color: colors.accent, fontWeight: FontWeight.bold)),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.check_circle, size: 14, color: colors.accent),
+                    const SizedBox(width: 4),
+                    Text(
+                      'GOOGLE 계정과 연동됨',
+                      style: theme.labelMono.copyWith(
+                        color: colors.accent,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ),
               ),
           ],
         ),
@@ -838,11 +864,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             },
           ),
         ] else ...[
+          Text('구글 드라이브(appdata)와 데이터가 안전하게 자동 연동 중입니다.', style: theme.bodySans.copyWith(fontSize: 13, color: colors.ink3)),
+          const SizedBox(height: 8),
           ListTile(
             contentPadding: EdgeInsets.zero,
             leading: CircleAvatar(
+              radius: 20,
               backgroundColor: colors.accent,
-              child: Text(user.email.isNotEmpty ? user.email[0].toUpperCase() : 'G', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              backgroundImage: user.photoUrl != null ? NetworkImage(user.photoUrl!) : null,
+              child: user.photoUrl == null
+                  ? Text(user.email.isNotEmpty ? user.email[0].toUpperCase() : 'G', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold))
+                  : null,
             ),
             title: Text(user.displayName ?? user.email, style: theme.wordTitle.copyWith(fontSize: 16)),
             subtitle: Text(user.email, style: theme.bodySans.copyWith(fontSize: 12, color: colors.ink3)),
