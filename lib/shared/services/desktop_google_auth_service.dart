@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
+import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
@@ -40,6 +42,18 @@ class DesktopGoogleAuthService {
   DesktopGoogleAccount? _currentAccount;
   DesktopGoogleAccount? get currentAccount => _currentAccount;
 
+  String _generateCodeVerifier() {
+    final random = Random.secure();
+    final values = List<int>.generate(32, (i) => random.nextInt(256));
+    return base64UrlEncode(values).replaceAll('=', '');
+  }
+
+  String _generateCodeChallenge(String codeVerifier) {
+    final bytes = utf8.encode(codeVerifier);
+    final digest = sha256.convert(bytes);
+    return base64UrlEncode(digest.bytes).replaceAll('=', '');
+  }
+
   Future<DesktopGoogleAccount?> signIn() async {
     HttpServer? server;
     try {
@@ -56,11 +70,16 @@ class DesktopGoogleAuthService {
       final port = server.port;
       final redirectUri = 'http://127.0.0.1:$port/';
 
+      final codeVerifier = _generateCodeVerifier();
+      final codeChallenge = _generateCodeChallenge(codeVerifier);
+
       final authUrl = Uri.https('accounts.google.com', '/o/oauth2/v2/auth', {
         'client_id': clientId,
         'redirect_uri': redirectUri,
         'response_type': 'code',
         'scope': scopes.join(' '),
+        'code_challenge': codeChallenge,
+        'code_challenge_method': 'S256',
       });
 
       // 2. 시스템 기본 웹 브라우저 열기
@@ -95,7 +114,7 @@ class DesktopGoogleAuthService {
         throw Exception('No auth code received from Google');
       }
 
-      // 4. Auth Code를 Access Token으로 교환
+      // 4. Auth Code를 Access Token으로 교환 (PKCE code_verifier 포함)
       final tokenResponse = await http.post(
         Uri.parse('https://oauth2.googleapis.com/token'),
         body: {
@@ -103,6 +122,7 @@ class DesktopGoogleAuthService {
           'code': code,
           'grant_type': 'authorization_code',
           'redirect_uri': redirectUri,
+          'code_verifier': codeVerifier,
         },
       );
 

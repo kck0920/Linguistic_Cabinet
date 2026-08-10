@@ -26,6 +26,7 @@ dependencies:
   
   # Utilities
   uuid: ^4.2.0
+  crypto: ^3.0.3
   
   # File Operations
   share_plus: ^10.0.0
