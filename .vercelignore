@@ -1,0 +1,11 @@
+.dart_tool/
+.freebuff/
+.scratch/
+build/
+android/
+ios/
+linux/
+macos/
+windows/
+integration_test/
+*.log
