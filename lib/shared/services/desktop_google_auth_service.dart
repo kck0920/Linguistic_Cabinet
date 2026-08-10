@@ -30,7 +30,7 @@ class DesktopGoogleAuthService {
   factory DesktopGoogleAuthService() => _instance;
   DesktopGoogleAuthService._internal();
 
-  static const String clientId = '1002909356316-llhqdfguevm9je83uhtdqblgm5621ra1.apps.googleusercontent.com';
+  static const String clientId = '1002909356316-gmvaad67pf9piq2q3n5co16124pb12ir.apps.googleusercontent.com';
   static const List<String> scopes = [
     'email',
     'profile',
