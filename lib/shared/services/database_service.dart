@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import 'package:flutter/foundation.dart';
@@ -185,6 +186,48 @@ class DatabaseService {
     if (_database != null) {
       await _database!.close();
       _database = null;
+    }
+  }
+
+  /// 데이터베이스 파일 바이너리(Bytes) 읽어오기 (웹/데스크톱 공통)
+  static Future<List<int>?> exportDatabaseBytes() async {
+    try {
+      if (kIsWeb) {
+        final dbFactory = databaseFactoryFfiWeb;
+        final bytes = await dbFactory.readDatabaseBytes(_dbName);
+        return bytes;
+      } else {
+        final String path = join(await getDatabasesPath(), _dbName);
+        final file = File(path);
+        if (await file.exists()) {
+          return await file.readAsBytes();
+        }
+      }
+      return null;
+    } catch (e) {
+      debugPrint('exportDatabaseBytes Error: $e');
+      return null;
+    }
+  }
+
+  /// 바이트 데이터로 로컬 데이터베이스 파일 교체하기
+  static Future<bool> importDatabaseBytes(List<int> bytes) async {
+    try {
+      await close();
+      if (kIsWeb) {
+        final dbFactory = databaseFactoryFfiWeb;
+        await dbFactory.writeDatabaseBytes(_dbName, Uint8List.fromList(bytes));
+      } else {
+        final String path = join(await getDatabasesPath(), _dbName);
+        final file = File(path);
+        await file.writeAsBytes(bytes, flush: true);
+      }
+      // 새 DB 다시 오픈
+      _database = await _initDatabase();
+      return true;
+    } catch (e) {
+      debugPrint('importDatabaseBytes Error: $e');
+      return false;
     }
   }
 

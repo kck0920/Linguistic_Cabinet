@@ -12,6 +12,8 @@ import '../../../review/data/repositories/review_repository.dart';
 import '../../../review/presentation/screens/review_screen.dart';
 import '../../../quiz/presentation/screens/quiz_screen.dart';
 import '../../../matching/presentation/screens/matching_screen.dart';
+import '../../../../shared/services/google_auth_service.dart';
+import '../../../../shared/services/google_drive_sync_service.dart';
 import '../../../../home/home_dashboard_screen.dart';
 import '../../../../dev/garden_preview_screen.dart';
 
@@ -54,12 +56,21 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _autoBackupEnabled = false;
   bool _reminderEnabled = false;
   String _reminderTime = '09:00';
+  bool _isGoogleSyncing = false;
 
   @override
   void initState() {
     super.initState();
     _loadAutoBackupSetting();
     _loadReminderSetting();
+    _trySilentSignInGoogle();
+  }
+
+  Future<void> _trySilentSignInGoogle() async {
+    final account = await GoogleAuthService().signInSilently();
+    if (account != null && mounted) {
+      setState(() {});
+    }
   }
 
   Future<void> _loadAutoBackupSetting() async {
@@ -455,6 +466,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              _buildGoogleDriveSyncSection(colors, theme),
               Text('AUTOMATIC LOCAL BACKUP', style: theme.labelMono),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
@@ -769,5 +781,119 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         );
       },
     );
+  }
+
+  Widget _buildGoogleDriveSyncSection(CabinetColors colors, CabinetTheme theme) {
+    final authService = GoogleAuthService();
+    final user = authService.currentUser;
+    final isSyncing = _isGoogleSyncing;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text('GOOGLE DRIVE SYNC', style: theme.labelMono),
+            if (user != null)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: colors.accent.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text('연결됨', style: theme.labelMono.copyWith(color: colors.accent, fontWeight: FontWeight.bold)),
+              ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        if (user == null) ...[
+          Text('구글 드라이브(appdata)에 단어장을 안전하게 백업 및 동기화합니다.', style: theme.bodySans.copyWith(fontSize: 13, color: colors.ink3)),
+          const SizedBox(height: 12),
+          CabinetBrutalButton(
+            text: 'Google 계정 연결하기',
+            icon: Icons.cloud_queue,
+            fullWidth: true,
+            onPressed: () async {
+              try {
+                final account = await authService.signIn();
+                if (account != null && mounted) {
+                  setState(() {});
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('${account.email} 계정과 연결되었습니다.')),
+                  );
+                  _triggerGoogleSync();
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Google 로그인 실패: $e')),
+                  );
+                }
+              }
+            },
+          ),
+        ] else ...[
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: CircleAvatar(
+              backgroundColor: colors.accent,
+              child: Text(user.email.isNotEmpty ? user.email[0].toUpperCase() : 'G', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            ),
+            title: Text(user.displayName ?? user.email, style: theme.wordTitle.copyWith(fontSize: 16)),
+            subtitle: Text(user.email, style: theme.bodySans.copyWith(fontSize: 12, color: colors.ink3)),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: CabinetBrutalButton(
+                  text: isSyncing ? '동기화 중...' : '지금 동기화',
+                  icon: isSyncing ? Icons.sync : Icons.cloud_sync,
+                  onPressed: () {
+                    if (!isSyncing) _triggerGoogleSync();
+                  },
+                ),
+              ),
+              const SizedBox(width: 8),
+              CabinetBrutalButton(
+                text: '연결 해제',
+                icon: Icons.logout,
+                bg: colors.paper2,
+                textColor: colors.ink,
+                onPressed: () async {
+                  await authService.signOut();
+                  if (mounted) {
+                    setState(() {});
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Google 계정 연결이 해제되었습니다.')),
+                    );
+                  }
+                },
+              ),
+            ],
+          ),
+        ],
+        const Divider(height: 24),
+      ],
+    );
+  }
+
+  Future<void> _triggerGoogleSync() async {
+    setState(() => _isGoogleSyncing = true);
+    final success = await GoogleDriveSyncService().sync();
+    if (mounted) {
+      setState(() => _isGoogleSyncing = false);
+      if (success) {
+        _refreshAllProviders();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Google Drive 동기화가 성공적으로 완료되었습니다!')),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Google Drive 동기화 실패. 네트워크나 계정 상태를 확인해 주세요.')),
+        );
+      }
+    }
   }
 }

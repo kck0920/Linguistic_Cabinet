@@ -38,6 +38,11 @@ dependencies:
   # Markdown rendering
   flutter_markdown: ^0.7.0
   
+  # Google Drive Sync
+  google_sign_in: ^6.2.1
+  googleapis: ^13.2.0
+  http: ^1.2.0
+  
   # Web
   web: ^1.1.0
   flutter_local_notifications: ^22.1.0

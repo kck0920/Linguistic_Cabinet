@@ -13,6 +13,7 @@ import '../../../achievements/data/achievement_evaluator.dart';
 import 'word_list_screen.dart';
 import '../../../../core/theme/cabinet_colors.dart';
 import '../../../../core/theme/cabinet_theme.dart';
+import '../../../../shared/services/google_drive_sync_service.dart';
 import '../../../../shared/widgets/cabinet_widgets.dart';
 import '../../../../core/utils/url_launcher_helper.dart';
 
@@ -572,6 +573,7 @@ class _WordFormScreenState extends ConsumerState<WordFormScreen> {
 
     // 단어 추가 직후 업적(First Word/Collector 등)을 즉시 평가한다 (fire-and-forget).
     unawaited(ref.read(achievementEvaluatorProvider).evaluateNow());
+    GoogleDriveSyncService().scheduleDebouncedSync();
 
     if (mounted) Navigator.pop(context);
   }
@@ -582,6 +584,7 @@ class _WordFormScreenState extends ConsumerState<WordFormScreen> {
     final reviewRepo = ref.read(reviewRepositoryProvider);
     await reviewRepo.deleteReviewCardByWordId(widget.word!.id);
     await repo.deleteWord(widget.word!.id);
+    GoogleDriveSyncService().scheduleDebouncedSync();
     if (mounted) Navigator.pop(context);
   }
 }
