@@ -43,10 +43,18 @@ class DesktopGoogleAuthService {
   Future<DesktopGoogleAccount?> signIn() async {
     HttpServer? server;
     try {
-      // 1. 임시 로컬 루프백 서버 바인딩 (랜덤 포트)
-      server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      // 1. 고정 선호 포트 시도 (8080, 8081, 8888 등)
+      final preferredPorts = [8080, 8081, 8888];
+      for (final p in preferredPorts) {
+        try {
+          server = await HttpServer.bind(InternetAddress.loopbackIPv4, p);
+          break;
+        } catch (_) {}
+      }
+      server ??= await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+
       final port = server.port;
-      final redirectUri = 'http://127.0.0.1:$port';
+      final redirectUri = 'http://127.0.0.1:$port/';
 
       final authUrl = Uri.https('accounts.google.com', '/o/oauth2/v2/auth', {
         'client_id': clientId,
