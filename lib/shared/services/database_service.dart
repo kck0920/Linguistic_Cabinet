@@ -210,9 +210,25 @@ class DatabaseService {
     }
   }
 
-  /// 바이트 데이터로 로컬 데이터베이스 파일 교체하기
+  /// 바이트 데이터로 로컬 데이터베이스 파일 교체하기 (로그인 세션 정보 보존)
   static Future<bool> importDatabaseBytes(List<int> bytes) async {
     try {
+      // 1. 덮어쓰기 전 현재 기기의 구글 로그인 세션 설정 백업
+      final Map<String, String> authSettingsBackup = {};
+      if (_database != null && _database!.isOpen) {
+        try {
+          final rows = await _database!.query('settings');
+          for (final r in rows) {
+            final k = r['key'] as String;
+            if (k.startsWith('google_auth_')) {
+              authSettingsBackup[k] = r['value'] as String;
+            }
+          }
+        } catch (e) {
+          debugPrint('Failed to backup auth settings before DB import: $e');
+        }
+      }
+
       await close();
       if (kIsWeb) {
         final dbFactory = databaseFactoryFfiWeb;
@@ -224,6 +240,24 @@ class DatabaseService {
       }
       // 새 DB 다시 오픈
       _database = await _initDatabase();
+
+      // 2. 덮어씌워진 DB의 settings 테이블에 로그인 세션 다시 복원
+      if (authSettingsBackup.isNotEmpty) {
+        try {
+          final batch = _database!.batch();
+          authSettingsBackup.forEach((key, value) {
+            batch.insert(
+              'settings',
+              {'key': key, 'value': value},
+              conflictAlgorithm: ConflictAlgorithm.replace,
+            );
+          });
+          await batch.commit(noResult: true);
+        } catch (e) {
+          debugPrint('Failed to restore auth settings after DB import: $e');
+        }
+      }
+
       return true;
     } catch (e) {
       debugPrint('importDatabaseBytes Error: $e');

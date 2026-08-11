@@ -5,9 +5,8 @@ import 'dart:math';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
-import 'package:sqflite/sqflite.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'database_service.dart';
+import 'google_session_storage.dart';
 import 'oauth_credentials.dart';
 
 class DesktopGoogleAccount {
@@ -65,7 +64,7 @@ class DesktopGoogleAuthService {
     return base64UrlEncode(digest.bytes).replaceAll('=', '');
   }
 
-  /// DB에 저장된 계정 세션 정보 불러오기 (앱 실행/Silent Sign-In 시 호출)
+  /// 전용 세션 저장소에서 계정 정보 불러오기 (앱 실행/Silent Sign-In 시 호출)
   Future<DesktopGoogleAccount?> loadSavedAccount() async {
     if (_currentAccount != null) {
       if (_currentAccount!.isExpired && _currentAccount!.refreshToken != null) {
@@ -75,37 +74,21 @@ class DesktopGoogleAuthService {
     }
 
     try {
-      final db = await DatabaseService.database;
-      final rows = await db.query('settings', where: 'key LIKE ?', whereArgs: ['google_auth_%']);
-      final map = <String, String>{};
-      for (final r in rows) {
-        map[r['key'] as String] = r['value'] as String;
-      }
-
-      final id = map['google_auth_user_id'];
-      final email = map['google_auth_email'];
-      final accessToken = map['google_auth_access_token'];
-
-      if (id != null && email != null && accessToken != null) {
-        final refreshToken = map['google_auth_refresh_token'];
-        final expiresAtMillis = int.tryParse(map['google_auth_expires_at'] ?? '');
-        final expiresAt = expiresAtMillis != null
-            ? DateTime.fromMillisecondsSinceEpoch(expiresAtMillis)
-            : null;
-
+      final sessionData = await GoogleSessionStorage.loadSession();
+      if (sessionData != null) {
         var acc = DesktopGoogleAccount(
-          id: id,
-          email: email,
-          displayName: map['google_auth_display_name'],
-          photoUrl: map['google_auth_photo_url'],
-          accessToken: accessToken,
-          refreshToken: refreshToken,
-          expiresAt: expiresAt,
+          id: sessionData.id,
+          email: sessionData.email,
+          displayName: sessionData.displayName,
+          photoUrl: sessionData.photoUrl,
+          accessToken: sessionData.accessToken,
+          refreshToken: sessionData.refreshToken,
+          expiresAt: sessionData.expiresAt,
         );
 
         _currentAccount = acc;
 
-        if (acc.isExpired && refreshToken != null) {
+        if (acc.isExpired && acc.refreshToken != null) {
           await refreshAccessToken();
         }
 
@@ -117,43 +100,29 @@ class DesktopGoogleAuthService {
     return null;
   }
 
-  /// DB에 계정 세션 정보 영구 저장
-  Future<void> _saveAccountToDb(DesktopGoogleAccount acc) async {
+  /// 세션 저장소에 계정 정보 영구 저장
+  Future<void> _saveAccount(DesktopGoogleAccount acc) async {
     try {
-      final db = await DatabaseService.database;
-      final batch = db.batch();
-
-      void insertSetting(String key, String? val) {
-        if (val != null) {
-          batch.insert(
-            'settings',
-            {'key': key, 'value': val},
-            conflictAlgorithm: ConflictAlgorithm.replace,
-          );
-        }
-      }
-
-      insertSetting('google_auth_user_id', acc.id);
-      insertSetting('google_auth_email', acc.email);
-      insertSetting('google_auth_display_name', acc.displayName);
-      insertSetting('google_auth_photo_url', acc.photoUrl);
-      insertSetting('google_auth_access_token', acc.accessToken);
-      insertSetting('google_auth_refresh_token', acc.refreshToken);
-      insertSetting('google_auth_expires_at', acc.expiresAt?.millisecondsSinceEpoch.toString());
-
-      await batch.commit(noResult: true);
+      await GoogleSessionStorage.saveSession(GoogleSessionData(
+        id: acc.id,
+        email: acc.email,
+        displayName: acc.displayName,
+        photoUrl: acc.photoUrl,
+        accessToken: acc.accessToken,
+        refreshToken: acc.refreshToken,
+        expiresAt: acc.expiresAt,
+      ));
     } catch (e) {
-      debugPrint('DesktopGoogleAuthService _saveAccountToDb Error: $e');
+      debugPrint('DesktopGoogleAuthService _saveAccount Error: $e');
     }
   }
 
-  /// DB에서 계정 세션 삭제 (로그아웃 시)
-  Future<void> _clearAccountFromDb() async {
+  /// 세션 저장소에서 계정 정보 삭제 (로그아웃 시)
+  Future<void> _clearAccount() async {
     try {
-      final db = await DatabaseService.database;
-      await db.delete('settings', where: 'key LIKE ?', whereArgs: ['google_auth_%']);
+      await GoogleSessionStorage.clearSession();
     } catch (e) {
-      debugPrint('DesktopGoogleAuthService _clearAccountFromDb Error: $e');
+      debugPrint('DesktopGoogleAuthService _clearAccount Error: $e');
     }
   }
 
@@ -188,7 +157,7 @@ class DesktopGoogleAuthService {
           expiresAt: newExpiresAt,
         );
 
-        await _saveAccountToDb(_currentAccount!);
+        await _saveAccount(_currentAccount!);
         return newAccessToken;
       } else {
         debugPrint('DesktopGoogleAuthService refreshAccessToken Failed: ${response.body}');
@@ -306,8 +275,8 @@ class DesktopGoogleAuthService {
         expiresAt: expiresAt,
       );
 
-      // 세션을 DB에 안전하게 보관하여 앱을 닫거나 포커스가 변경되어도 영구 유지되도록 함
-      await _saveAccountToDb(_currentAccount!);
+      // 세션을 전용 저장소에 저장
+      await _saveAccount(_currentAccount!);
 
       return _currentAccount;
     } catch (e) {
@@ -320,6 +289,6 @@ class DesktopGoogleAuthService {
 
   Future<void> signOut() async {
     _currentAccount = null;
-    await _clearAccountFromDb();
+    await _clearAccount();
   }
 }

@@ -3,9 +3,8 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:http/http.dart' as http;
-import 'package:sqflite/sqflite.dart';
-import 'database_service.dart';
 import 'desktop_google_auth_service.dart';
+import 'google_session_storage.dart';
 
 class GoogleAuthUser {
   final String id;
@@ -72,65 +71,6 @@ class GoogleAuthService {
     );
   }
 
-  /// DB에 웹 유저 정보 영구 저장
-  Future<void> _saveWebUserToDb(GoogleAuthUser user) async {
-    try {
-      final db = await DatabaseService.database;
-      final batch = db.batch();
-      void insertSetting(String key, String? val) {
-        if (val != null) {
-          batch.insert(
-            'settings',
-            {'key': key, 'value': val},
-            conflictAlgorithm: ConflictAlgorithm.replace,
-          );
-        }
-      }
-      insertSetting('google_auth_user_id', user.id);
-      insertSetting('google_auth_email', user.email);
-      insertSetting('google_auth_display_name', user.displayName);
-      insertSetting('google_auth_photo_url', user.photoUrl);
-      await batch.commit(noResult: true);
-    } catch (e) {
-      debugPrint('GoogleAuthService _saveWebUserToDb error: $e');
-    }
-  }
-
-  /// DB에서 웹 유저 정보 복원
-  Future<GoogleAuthUser?> _loadWebUserFromDb() async {
-    try {
-      final db = await DatabaseService.database;
-      final rows = await db.query('settings', where: 'key LIKE ?', whereArgs: ['google_auth_%']);
-      final map = <String, String>{};
-      for (final r in rows) {
-        map[r['key'] as String] = r['value'] as String;
-      }
-      final id = map['google_auth_user_id'];
-      final email = map['google_auth_email'];
-      if (id != null && email != null) {
-        return GoogleAuthUser(
-          id: id,
-          email: email,
-          displayName: map['google_auth_display_name'],
-          photoUrl: map['google_auth_photo_url'],
-        );
-      }
-    } catch (e) {
-      debugPrint('GoogleAuthService _loadWebUserFromDb error: $e');
-    }
-    return null;
-  }
-
-  /// DB에서 웹 유저 정보 삭제
-  Future<void> _clearWebUserFromDb() async {
-    try {
-      final db = await DatabaseService.database;
-      await db.delete('settings', where: 'key LIKE ?', whereArgs: ['google_auth_%']);
-    } catch (e) {
-      debugPrint('GoogleAuthService _clearWebUserFromDb error: $e');
-    }
-  }
-
   /// 구글 로그인 시도 (플랫폼 자동 판단)
   Future<GoogleAuthUser?> signIn() async {
     try {
@@ -159,7 +99,13 @@ class GoogleAuthService {
           photoUrl: account.photoUrl,
         );
         _savedWebUser = user;
-        await _saveWebUserToDb(user);
+        await GoogleSessionStorage.saveSession(GoogleSessionData(
+          id: user.id,
+          email: user.email,
+          displayName: user.displayName,
+          photoUrl: user.photoUrl,
+          accessToken: '',
+        ));
         _userController.add(user);
         return user;
       }
@@ -188,11 +134,17 @@ class GoogleAuthService {
         return null;
       }
 
-      // 웹 환경: DB에 저장된 유저 세션이 있다면 우선 복원
-      final savedUser = await _loadWebUserFromDb();
-      if (savedUser != null) {
-        _savedWebUser = savedUser;
-        _userController.add(savedUser);
+      // 웹 환경: 독립 세션 저장소에서 저장된 유저 정보 복원
+      final sessionData = await GoogleSessionStorage.loadSession();
+      if (sessionData != null) {
+        final user = GoogleAuthUser(
+          id: sessionData.id,
+          email: sessionData.email,
+          displayName: sessionData.displayName,
+          photoUrl: sessionData.photoUrl,
+        );
+        _savedWebUser = user;
+        _userController.add(user);
       }
 
       try {
@@ -206,7 +158,13 @@ class GoogleAuthService {
             photoUrl: account.photoUrl,
           );
           _savedWebUser = user;
-          await _saveWebUserToDb(user);
+          await GoogleSessionStorage.saveSession(GoogleSessionData(
+            id: user.id,
+            email: user.email,
+            displayName: user.displayName,
+            photoUrl: user.photoUrl,
+            accessToken: '',
+          ));
           _userController.add(user);
           return user;
         }
@@ -232,14 +190,14 @@ class GoogleAuthService {
 
       _savedWebUser = null;
       _signedInAccount = null;
-      await _clearWebUserFromDb();
+      await GoogleSessionStorage.clearSession();
       await _googleSignIn.signOut();
       _userController.add(null);
     } catch (e) {
       debugPrint('Google Sign-Out Error: $e');
       _savedWebUser = null;
       _signedInAccount = null;
-      await _clearWebUserFromDb();
+      await GoogleSessionStorage.clearSession();
       _userController.add(null);
     }
   }
