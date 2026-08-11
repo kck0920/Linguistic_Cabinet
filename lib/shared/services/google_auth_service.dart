@@ -146,12 +146,22 @@ class GoogleAuthService {
           photoUrl: account.photoUrl,
         );
         _savedWebUser = user;
+
+        String token = '';
+        try {
+          final authHeaders = await account.authHeaders;
+          token = authHeaders['Authorization']?.replaceAll('Bearer ', '') ?? '';
+        } catch (e) {
+          debugPrint('Error getting web auth headers: $e');
+        }
+
         await GoogleSessionStorage.saveSession(GoogleSessionData(
           id: user.id,
           email: user.email,
           displayName: user.displayName,
           photoUrl: user.photoUrl,
-          accessToken: '',
+          accessToken: token,
+          expiresAt: DateTime.now().add(const Duration(hours: 1)),
         ));
         _userController.add(user);
         return user;
@@ -181,7 +191,7 @@ class GoogleAuthService {
         return null;
       }
 
-      // 웹 환경: 독립 세션 저장소에서 저장된 유저 정보 복원
+      // 웹/모바일 환경: 세션 저장소에서 저장된 유저 정보 및 토큰 복원
       final sessionData = await GoogleSessionStorage.loadSession();
       if (sessionData != null) {
         final user = GoogleAuthUser(
@@ -205,12 +215,20 @@ class GoogleAuthService {
             photoUrl: account.photoUrl,
           );
           _savedWebUser = user;
+
+          String token = sessionData?.accessToken ?? '';
+          try {
+            final authHeaders = await account.authHeaders;
+            token = authHeaders['Authorization']?.replaceAll('Bearer ', '') ?? token;
+          } catch (_) {}
+
           await GoogleSessionStorage.saveSession(GoogleSessionData(
             id: user.id,
             email: user.email,
             displayName: user.displayName,
             photoUrl: user.photoUrl,
-            accessToken: '',
+            accessToken: token,
+            expiresAt: DateTime.now().add(const Duration(hours: 1)),
           ));
           _userController.add(user);
           return user;
@@ -262,11 +280,53 @@ class GoogleAuthService {
       return _AuthenticatedClient(desktopAcc.authHeaders, http.Client());
     }
 
-    final account = _signedInAccount ?? _googleSignIn.currentUser ?? (await _googleSignIn.signInSilently());
-    if (account == null) return null;
+    // 웹/모바일 환경
+    try {
+      final account = _signedInAccount ?? _googleSignIn.currentUser ?? (await _googleSignIn.signInSilently());
+      if (account != null) {
+        final authHeaders = await account.authHeaders;
+        final token = authHeaders['Authorization']?.replaceAll('Bearer ', '');
+        if (token != null && token.isNotEmpty) {
+          // 토큰 최신화 저장
+          final currentUserObj = currentUser;
+          if (currentUserObj != null) {
+            await GoogleSessionStorage.saveSession(GoogleSessionData(
+              id: currentUserObj.id,
+              email: currentUserObj.email,
+              displayName: currentUserObj.displayName,
+              photoUrl: currentUserObj.photoUrl,
+              accessToken: token,
+              expiresAt: DateTime.now().add(const Duration(hours: 1)),
+            ));
+          }
+        }
+        return _AuthenticatedClient(authHeaders, http.Client());
+      }
+    } catch (e) {
+      debugPrint('GoogleAuthService getAuthenticatedClient error: $e');
+    }
 
-    final authHeaders = await account.authHeaders;
-    return _AuthenticatedClient(authHeaders, http.Client());
+    // 웹 세션 보관소(localStorage)의 Access Token 활용 복원
+    final sessionData = await GoogleSessionStorage.loadSession();
+    if (sessionData != null && sessionData.accessToken.isNotEmpty) {
+      final isExpired = sessionData.expiresAt != null && DateTime.now().isAfter(sessionData.expiresAt!);
+      if (isExpired) {
+        // 만료된 경우 재로그인 / Silent auth 시도
+        try {
+          final account = await _googleSignIn.signInSilently();
+          if (account != null) {
+            final authHeaders = await account.authHeaders;
+            return _AuthenticatedClient(authHeaders, http.Client());
+          }
+        } catch (_) {}
+      } else {
+        // 토큰이 유효한 경우 보관된 Access Token으로 인증 클라이언트 제공
+        final headers = {'Authorization': 'Bearer ${sessionData.accessToken}'};
+        return _AuthenticatedClient(headers, http.Client());
+      }
+    }
+
+    return null;
   }
 }
 
