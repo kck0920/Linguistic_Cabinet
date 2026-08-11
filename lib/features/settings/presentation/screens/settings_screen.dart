@@ -795,8 +795,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   Widget _buildGoogleDriveSyncSection(CabinetColors colors, CabinetTheme theme) {
-    final authService = GoogleAuthService();
-    final user = authService.currentUser;
+    final googleUserAsync = ref.watch(googleUserProvider);
+    final user = googleUserAsync.valueOrNull;
     final isSyncing = _isGoogleSyncing;
 
     return Column(
@@ -842,9 +842,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             fullWidth: true,
             onPressed: () async {
               try {
-                final account = await authService.signIn();
+                final account = await ref.read(googleUserProvider.notifier).signIn();
                 if (account != null && mounted) {
-                  setState(() {});
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(content: Text('${account.email} 계정과 연결되었습니다.')),
                   );
@@ -898,9 +897,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 bg: colors.paper2,
                 textColor: colors.ink,
                 onPressed: () async {
-                  await authService.signOut();
+                  await ref.read(googleUserProvider.notifier).signOut();
                   if (mounted) {
-                    setState(() {});
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(content: Text('Google 계정 연결이 해제되었습니다.')),
                     );

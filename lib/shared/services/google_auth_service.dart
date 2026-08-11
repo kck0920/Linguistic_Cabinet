@@ -3,8 +3,55 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:http/http.dart' as http;
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'desktop_google_auth_service.dart';
 import 'google_session_storage.dart';
+
+final googleUserProvider = StateNotifierProvider<GoogleUserNotifier, AsyncValue<GoogleAuthUser?>>((ref) {
+  return GoogleUserNotifier();
+});
+
+class GoogleUserNotifier extends StateNotifier<AsyncValue<GoogleAuthUser?>> {
+  GoogleUserNotifier() : super(const AsyncValue.loading()) {
+    init();
+  }
+
+  Future<void> init() async {
+    try {
+      final user = await GoogleAuthService().signInSilently();
+      state = AsyncValue.data(user);
+    } catch (e, st) {
+      state = AsyncValue.error(e, st);
+    }
+  }
+
+  Future<GoogleAuthUser?> signIn() async {
+    state = const AsyncValue.loading();
+    try {
+      final user = await GoogleAuthService().signIn();
+      state = AsyncValue.data(user);
+      return user;
+    } catch (e, st) {
+      state = AsyncValue.error(e, st);
+      rethrow;
+    }
+  }
+
+  Future<void> signOut() async {
+    state = const AsyncValue.loading();
+    try {
+      await GoogleAuthService().signOut();
+      state = const AsyncValue.data(null);
+    } catch (e, st) {
+      state = AsyncValue.error(e, st);
+    }
+  }
+
+  void refreshState() async {
+    final user = await GoogleAuthService().signInSilently();
+    state = AsyncValue.data(user);
+  }
+}
 
 class GoogleAuthUser {
   final String id;
