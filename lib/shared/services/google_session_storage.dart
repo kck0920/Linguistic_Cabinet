@@ -1,6 +1,8 @@
 export 'google_session_storage_stub.dart'
     if (dart.library.js_interop) 'google_session_storage_web.dart';
 
+export 'google_session_storage_stub.dart' show GoogleSessionData;
+
 import 'google_session_storage_stub.dart';
 import 'google_session_storage_stub.dart'
     if (dart.library.js_interop) 'google_session_storage_web.dart' as impl;
