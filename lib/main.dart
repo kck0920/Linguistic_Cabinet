@@ -6,6 +6,8 @@ import 'app.dart';
 import 'shared/services/database_service.dart';
 import 'core/utils/platform_helper.dart';
 
+import 'shared/services/google_auth_service.dart';
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
@@ -17,6 +19,9 @@ void main() async {
     
     // Initialize database
     await DatabaseService.database;
+
+    // Restore Google Auth Session silently
+    await GoogleAuthService().signInSilently();
   } catch (e, stack) {
     debugPrint("CRITICAL DATABASE ERROR: $e");
     debugPrint('$stack');

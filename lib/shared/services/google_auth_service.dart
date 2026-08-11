@@ -106,12 +106,31 @@ class GoogleAuthService {
   Future<GoogleAuthUser?> signInSilently() async {
     try {
       if (!kIsWeb && (Platform.isLinux || Platform.isWindows)) {
-        return currentUser;
+        final desktopAcc = await _desktopAuth.loadSavedAccount();
+        if (desktopAcc != null) {
+          final user = GoogleAuthUser(
+            id: desktopAcc.id,
+            email: desktopAcc.email,
+            displayName: desktopAcc.displayName,
+            photoUrl: desktopAcc.photoUrl,
+          );
+          _userController.add(user);
+          return user;
+        }
+        return null;
       }
 
       final account = await _googleSignIn.signInSilently();
       if (account != null) {
         _signedInAccount = account;
+        final user = GoogleAuthUser(
+          id: account.id,
+          email: account.email,
+          displayName: account.displayName,
+          photoUrl: account.photoUrl,
+        );
+        _userController.add(user);
+        return user;
       }
       return currentUser;
     } catch (e) {
@@ -124,7 +143,7 @@ class GoogleAuthService {
   Future<void> signOut() async {
     try {
       if (!kIsWeb && (Platform.isLinux || Platform.isWindows)) {
-        _desktopAuth.signOut();
+        await _desktopAuth.signOut();
         _userController.add(null);
         return;
       }
@@ -142,7 +161,12 @@ class GoogleAuthService {
   /// googleapis 패키지에서 사용할 인증 헤더가 포함된 http.Client 객체 리턴
   Future<http.Client?> getAuthenticatedClient() async {
     if (!kIsWeb && (Platform.isLinux || Platform.isWindows)) {
-      final desktopAcc = _desktopAuth.currentAccount;
+      var desktopAcc = await _desktopAuth.loadSavedAccount();
+      if (desktopAcc == null) return null;
+      if (desktopAcc.isExpired && desktopAcc.refreshToken != null) {
+        await _desktopAuth.refreshAccessToken();
+        desktopAcc = _desktopAuth.currentAccount;
+      }
       if (desktopAcc == null) return null;
       return _AuthenticatedClient(desktopAcc.authHeaders, http.Client());
     }
