@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:http/http.dart' as http;
+import 'package:sqflite/sqflite.dart';
+import 'database_service.dart';
 import 'desktop_google_auth_service.dart';
 
 class GoogleAuthUser {
@@ -33,6 +35,7 @@ class GoogleAuthService {
   static String? customClientId = '1002909356316-llhqdfguevm9je83uhtdqblgm5621ra1.apps.googleusercontent.com';
 
   GoogleSignInAccount? _signedInAccount;
+  GoogleAuthUser? _savedWebUser;
   final DesktopGoogleAuthService _desktopAuth = DesktopGoogleAuthService();
 
   final _userController = StreamController<GoogleAuthUser?>.broadcast();
@@ -55,6 +58,10 @@ class GoogleAuthService {
       );
     }
 
+    if (_savedWebUser != null) {
+      return _savedWebUser;
+    }
+
     final acc = _signedInAccount ?? _googleSignIn.currentUser;
     if (acc == null) return null;
     return GoogleAuthUser(
@@ -63,6 +70,65 @@ class GoogleAuthService {
       displayName: acc.displayName,
       photoUrl: acc.photoUrl,
     );
+  }
+
+  /// DB에 웹 유저 정보 영구 저장
+  Future<void> _saveWebUserToDb(GoogleAuthUser user) async {
+    try {
+      final db = await DatabaseService.database;
+      final batch = db.batch();
+      void insertSetting(String key, String? val) {
+        if (val != null) {
+          batch.insert(
+            'settings',
+            {'key': key, 'value': val},
+            conflictAlgorithm: ConflictAlgorithm.replace,
+          );
+        }
+      }
+      insertSetting('google_auth_user_id', user.id);
+      insertSetting('google_auth_email', user.email);
+      insertSetting('google_auth_display_name', user.displayName);
+      insertSetting('google_auth_photo_url', user.photoUrl);
+      await batch.commit(noResult: true);
+    } catch (e) {
+      debugPrint('GoogleAuthService _saveWebUserToDb error: $e');
+    }
+  }
+
+  /// DB에서 웹 유저 정보 복원
+  Future<GoogleAuthUser?> _loadWebUserFromDb() async {
+    try {
+      final db = await DatabaseService.database;
+      final rows = await db.query('settings', where: 'key LIKE ?', whereArgs: ['google_auth_%']);
+      final map = <String, String>{};
+      for (final r in rows) {
+        map[r['key'] as String] = r['value'] as String;
+      }
+      final id = map['google_auth_user_id'];
+      final email = map['google_auth_email'];
+      if (id != null && email != null) {
+        return GoogleAuthUser(
+          id: id,
+          email: email,
+          displayName: map['google_auth_display_name'],
+          photoUrl: map['google_auth_photo_url'],
+        );
+      }
+    } catch (e) {
+      debugPrint('GoogleAuthService _loadWebUserFromDb error: $e');
+    }
+    return null;
+  }
+
+  /// DB에서 웹 유저 정보 삭제
+  Future<void> _clearWebUserFromDb() async {
+    try {
+      final db = await DatabaseService.database;
+      await db.delete('settings', where: 'key LIKE ?', whereArgs: ['google_auth_%']);
+    } catch (e) {
+      debugPrint('GoogleAuthService _clearWebUserFromDb error: $e');
+    }
   }
 
   /// 구글 로그인 시도 (플랫폼 자동 판단)
@@ -92,6 +158,8 @@ class GoogleAuthService {
           displayName: account.displayName,
           photoUrl: account.photoUrl,
         );
+        _savedWebUser = user;
+        await _saveWebUserToDb(user);
         _userController.add(user);
         return user;
       }
@@ -120,19 +188,33 @@ class GoogleAuthService {
         return null;
       }
 
-      final account = await _googleSignIn.signInSilently();
-      if (account != null) {
-        _signedInAccount = account;
-        final user = GoogleAuthUser(
-          id: account.id,
-          email: account.email,
-          displayName: account.displayName,
-          photoUrl: account.photoUrl,
-        );
-        _userController.add(user);
-        return user;
+      // 웹 환경: DB에 저장된 유저 세션이 있다면 우선 복원
+      final savedUser = await _loadWebUserFromDb();
+      if (savedUser != null) {
+        _savedWebUser = savedUser;
+        _userController.add(savedUser);
       }
-      return currentUser;
+
+      try {
+        final account = await _googleSignIn.signInSilently();
+        if (account != null) {
+          _signedInAccount = account;
+          final user = GoogleAuthUser(
+            id: account.id,
+            email: account.email,
+            displayName: account.displayName,
+            photoUrl: account.photoUrl,
+          );
+          _savedWebUser = user;
+          await _saveWebUserToDb(user);
+          _userController.add(user);
+          return user;
+        }
+      } catch (e) {
+        debugPrint('Google Sign In Web Silent Error: $e');
+      }
+
+      return _savedWebUser ?? currentUser;
     } catch (e) {
       debugPrint('Google Silent Sign-In Error: $e');
       return currentUser;
@@ -148,12 +230,16 @@ class GoogleAuthService {
         return;
       }
 
+      _savedWebUser = null;
       _signedInAccount = null;
+      await _clearWebUserFromDb();
       await _googleSignIn.signOut();
       _userController.add(null);
     } catch (e) {
       debugPrint('Google Sign-Out Error: $e');
+      _savedWebUser = null;
       _signedInAccount = null;
+      await _clearWebUserFromDb();
       _userController.add(null);
     }
   }
