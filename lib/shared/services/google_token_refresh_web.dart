@@ -106,7 +106,7 @@ class GoogleTokenRefresher {
         'response_type': 'token',
         'scope': scopes.join(' '),
         'include_granted_scopes': 'true',
-        'login_hint': ?loginHint,
+        if (loginHint != null && loginHint.isNotEmpty) 'login_hint': loginHint,
       });
       // 참고: redirect_uri(현재 페이지 URL)는 Google Cloud Console의 OAuth
       // 클라이언트 'Authorized redirect URIs'에 정확히 등록돼 있어야 한다.

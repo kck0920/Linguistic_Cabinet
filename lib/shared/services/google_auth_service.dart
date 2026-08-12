@@ -393,24 +393,14 @@ class GoogleAuthService {
       return _desktopAuthenticatedClient();
     }
 
-    // 웹: GIS Token Client로 재발급 우선 시도 (interactive면 팝업 허용)
+    // 웹: GIS Token Client로 조용히(Silent) 재발급 시도 (팝업/리다이렉트 400 에러 창 노출 전면 차단)
     if (_isWebAuth) {
       final sessionData = await GoogleSessionStorage.loadSession();
       if (sessionData != null) {
-        final client =
-            await _refreshWebToken(sessionData, interactive: interactive);
+        // 400 invalid_request 리다이렉트 창이 뜨는 것을 완전 차단하기 위해 interactive 여부와 상관없이 prompt: '' (Silent)로만 갱신
+        final client = await _refreshWebToken(sessionData, interactive: false);
         if (client != null) return client;
-        // 팝업 재인증이 실패하면 페이지 리다이렉트로 폴백해 모바일 브라우저
-        // (팝업 차단·쿠키 차단)에서도 동기화를 유지한다. 복귀 후 보류 동기화가
-        // 자동 재개된다. (수동 동기화·웹 한정)
-        if (interactive && !suppressInteractiveReauth) {
-          await _startRedirectReauth(sessionData);
-          return null;
-        }
       }
-      // GIS 재발급이 실패한 상황에서 OneTap 재인증은 거의 실패하고
-      // 예기치 않은 UI를 띄울 수 있으므로, 메모리에 방금 로그인한
-      // 계정이 있는 경우에만 google_sign_in 폴백을 시도한다.
       if (_signedInAccount == null) return null;
     }
 
