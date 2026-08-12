@@ -68,14 +68,17 @@ class DesktopGoogleAuthService {
   Future<DesktopGoogleAccount?> loadSavedAccount() async {
     if (_currentAccount != null) {
       if (_currentAccount!.isExpired && _currentAccount!.refreshToken != null) {
+        debugPrint('[DESKTOP_AUTH] Token expired, refreshing access token...');
         await refreshAccessToken();
       }
       return _currentAccount;
     }
 
     try {
+      debugPrint('[DESKTOP_AUTH] Loading session from GoogleSessionStorage...');
       final sessionData = await GoogleSessionStorage.loadSession();
       if (sessionData != null) {
+        debugPrint('[DESKTOP_AUTH] Found saved session for: ${sessionData.email}');
         var acc = DesktopGoogleAccount(
           id: sessionData.id,
           email: sessionData.email,
@@ -89,10 +92,13 @@ class DesktopGoogleAuthService {
         _currentAccount = acc;
 
         if (acc.isExpired && acc.refreshToken != null) {
+          debugPrint('[DESKTOP_AUTH] Saved session expired, refreshing access token...');
           await refreshAccessToken();
         }
 
         return _currentAccount;
+      } else {
+        debugPrint('[DESKTOP_AUTH] No saved session found.');
       }
     } catch (e) {
       debugPrint('DesktopGoogleAuthService loadSavedAccount Error: $e');

@@ -21,7 +21,9 @@ void main() async {
     await DatabaseService.database;
 
     // Restore Google Auth Session silently
-    await GoogleAuthService().signInSilently();
+    debugPrint('[MAIN] Attempting signInSilently at app startup...');
+    final restoredUser = await GoogleAuthService().signInSilently();
+    debugPrint('[MAIN] Silent sign in result: ${restoredUser?.email}');
   } catch (e, stack) {
     debugPrint("CRITICAL DATABASE ERROR: $e");
     debugPrint('$stack');

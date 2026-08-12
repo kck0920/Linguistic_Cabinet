@@ -6,6 +6,14 @@ import 'package:http/http.dart' as http;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'desktop_google_auth_service.dart';
 import 'google_session_storage.dart';
+import 'google_token_refresh.dart';
+
+/// 토큰 재발급 핸들러 시그니처 (웹: GIS Token Client, 테스트: 주입 가능)
+typedef TokenRefreshHandler = Future<GoogleTokenRefreshResult?> Function({
+  required String clientId,
+  required List<String> scopes,
+  String? loginHint,
+});
 
 final googleUserProvider = StateNotifierProvider<GoogleUserNotifier, AsyncValue<GoogleAuthUser?>>((ref) {
   return GoogleUserNotifier();
@@ -84,6 +92,19 @@ class GoogleAuthService {
   GoogleAuthUser? _savedWebUser;
   final DesktopGoogleAuthService _desktopAuth = DesktopGoogleAuthService();
 
+  /// 테스트에서 토큰 재발급 동작을 주입하는 시임 (null이면 실제 구현 사용)
+  @visibleForTesting
+  TokenRefreshHandler? tokenRefreshHandler;
+
+  /// 테스트에서 VM에서도 웹 인증 경로를 강제하는 시임
+  @visibleForTesting
+  bool forceWebAuthPath = false;
+
+  bool get _isDesktopAuth =>
+      !kIsWeb && (Platform.isLinux || Platform.isWindows) && !forceWebAuthPath;
+
+  bool get _isWebAuth => kIsWeb || forceWebAuthPath;
+
   final _userController = StreamController<GoogleAuthUser?>.broadcast();
   Stream<GoogleAuthUser?> get onCurrentUserChanged => _userController.stream;
 
@@ -93,7 +114,7 @@ class GoogleAuthService {
       );
 
   GoogleAuthUser? get currentUser {
-    if (!kIsWeb && (Platform.isLinux || Platform.isWindows)) {
+    if (_isDesktopAuth) {
       final desktopAcc = _desktopAuth.currentAccount;
       if (desktopAcc == null) return null;
       return GoogleAuthUser(
@@ -121,7 +142,7 @@ class GoogleAuthService {
   /// 구글 로그인 시도 (플랫폼 자동 판단)
   Future<GoogleAuthUser?> signIn() async {
     try {
-      if (!kIsWeb && (Platform.isLinux || Platform.isWindows)) {
+      if (_isDesktopAuth) {
         final desktopAcc = await _desktopAuth.signIn();
         if (desktopAcc != null) {
           final user = GoogleAuthUser(
@@ -150,7 +171,10 @@ class GoogleAuthService {
         String token = '';
         try {
           final authHeaders = await account.authHeaders;
-          token = authHeaders['Authorization']?.replaceAll('Bearer ', '') ?? '';
+          final candidate = authHeaders['Authorization']?.replaceAll('Bearer ', '');
+          if (_isUsableToken(candidate)) {
+            token = candidate!;
+          }
         } catch (e) {
           debugPrint('Error getting web auth headers: $e');
         }
@@ -176,7 +200,7 @@ class GoogleAuthService {
   /// 기존 로그인 세션 조용히 복원
   Future<GoogleAuthUser?> signInSilently() async {
     try {
-      if (!kIsWeb && (Platform.isLinux || Platform.isWindows)) {
+      if (_isDesktopAuth) {
         final desktopAcc = await _desktopAuth.loadSavedAccount();
         if (desktopAcc != null) {
           final user = GoogleAuthUser(
@@ -216,10 +240,15 @@ class GoogleAuthService {
           );
           _savedWebUser = user;
 
-          String token = sessionData?.accessToken ?? '';
+          String token = sessionData != null && _isUsableToken(sessionData.accessToken)
+              ? sessionData.accessToken
+              : '';
           try {
             final authHeaders = await account.authHeaders;
-            token = authHeaders['Authorization']?.replaceAll('Bearer ', '') ?? token;
+            final candidate = authHeaders['Authorization']?.replaceAll('Bearer ', '');
+            if (_isUsableToken(candidate)) {
+              token = candidate!;
+            }
           } catch (_) {}
 
           await GoogleSessionStorage.saveSession(GoogleSessionData(
@@ -247,7 +276,7 @@ class GoogleAuthService {
   /// 로그아웃
   Future<void> signOut() async {
     try {
-      if (!kIsWeb && (Platform.isLinux || Platform.isWindows)) {
+      if (_isDesktopAuth) {
         await _desktopAuth.signOut();
         _userController.add(null);
         return;
@@ -267,9 +296,93 @@ class GoogleAuthService {
     }
   }
 
-  /// googleapis 패키지에서 사용할 인증 헤더가 포함된 http.Client 객체 리턴
-  Future<http.Client?> getAuthenticatedClient() async {
-    if (!kIsWeb && (Platform.isLinux || Platform.isWindows)) {
+  /// 저장된 access token이 실제 사용 가능한 값인지 검사
+  bool _isUsableToken(String? token) =>
+      token != null && token.isNotEmpty && token != 'null';
+
+  /// 저장된 세션 토큰이 만료되었는지 검사 (안전 여유 5분: 만료 직전에도 재발급)
+  bool _isExpiredSession(GoogleSessionData session) {
+    final expiresAt = session.expiresAt;
+    if (expiresAt == null) return true;
+    return DateTime.now().isAfter(expiresAt.subtract(const Duration(minutes: 5)));
+  }
+
+  /// 웹 전용: GIS Token Client로 새 access token을 조용히 발급받아 세션에 저장한다.
+  /// 실패 시 null. (테스트에서는 [tokenRefreshHandler]로 대체 가능)
+  Future<http.Client?> _silentWebTokenRefresh(GoogleSessionData session) async {
+    final handler = tokenRefreshHandler ?? GoogleTokenRefresher.refreshAccessToken;
+    final result = await handler(
+      clientId: customClientId ?? '',
+      scopes: _scopes,
+      loginHint: session.email,
+    );
+    if (result == null) return null;
+
+    await GoogleSessionStorage.saveSession(GoogleSessionData(
+      id: session.id,
+      email: session.email,
+      displayName: session.displayName,
+      photoUrl: session.photoUrl,
+      accessToken: result.accessToken,
+      expiresAt: result.expiresAt,
+    ));
+    final headers = {'Authorization': 'Bearer ${result.accessToken}'};
+    return _AuthenticatedClient(headers, http.Client());
+  }
+
+  /// 인증 실패(401 등)가 발생했을 때 새 토큰으로 재인증을 시도하고,
+  /// 성공 시 새 인증 클라이언트를 반환한다. 실패 시 null.
+  Future<http.Client?> reauthenticate() async {
+    if (_isDesktopAuth) {
+      return _desktopAuthenticatedClient();
+    }
+
+    // 웹: GIS Token Client로 조용한 재발급 우선 시도
+    if (_isWebAuth) {
+      final sessionData = await GoogleSessionStorage.loadSession();
+      if (sessionData != null) {
+        final client = await _silentWebTokenRefresh(sessionData);
+        if (client != null) return client;
+      }
+      // GIS 재발급이 실패한 상황에서 OneTap 재인증은 거의 실패하고
+      // 예기치 않은 UI를 띄울 수 있으므로, 메모리에 방금 로그인한
+      // 계정이 있는 경우에만 google_sign_in 폴백을 시도한다.
+      if (_signedInAccount == null) return null;
+    }
+
+    // 모바일 및 웹 폴백: google_sign_in 계정 세션 재사용
+    try {
+      final account = _signedInAccount ??
+          _googleSignIn.currentUser ??
+          (await _googleSignIn.signInSilently());
+      if (account != null) {
+        final authHeaders = await account.authHeaders;
+        final token = authHeaders['Authorization']?.replaceAll('Bearer ', '');
+        if (_isUsableToken(token)) {
+          final currentUserObj = currentUser;
+          if (currentUserObj != null) {
+            await GoogleSessionStorage.saveSession(GoogleSessionData(
+              id: currentUserObj.id,
+              email: currentUserObj.email,
+              displayName: currentUserObj.displayName,
+              photoUrl: currentUserObj.photoUrl,
+              accessToken: token!,
+              expiresAt: DateTime.now().add(const Duration(hours: 1)),
+            ));
+          }
+          return _AuthenticatedClient(authHeaders, http.Client());
+        }
+      }
+    } catch (e) {
+      debugPrint('GoogleAuthService reauthenticate error: $e');
+    }
+    return null;
+  }
+
+  /// 데스크톱(리눅스/윈도우): 저장된 계정으로 인증 클라이언트 생성
+  /// (만료 시 refresh token으로 자동 갱신)
+  Future<http.Client?> _desktopAuthenticatedClient() async {
+    try {
       var desktopAcc = await _desktopAuth.loadSavedAccount();
       if (desktopAcc == null) return null;
       if (desktopAcc.isExpired && desktopAcc.refreshToken != null) {
@@ -278,15 +391,45 @@ class GoogleAuthService {
       }
       if (desktopAcc == null) return null;
       return _AuthenticatedClient(desktopAcc.authHeaders, http.Client());
+    } catch (e) {
+      debugPrint('GoogleAuthService desktop auth client error: $e');
+      return null;
+    }
+  }
+
+  /// googleapis 패키지에서 사용할 인증 헤더가 포함된 http.Client 객체 리턴
+  Future<http.Client?> getAuthenticatedClient() async {
+    if (_isDesktopAuth) {
+      return _desktopAuthenticatedClient();
     }
 
     // 웹/모바일 환경
     try {
-      final account = _signedInAccount ?? _googleSignIn.currentUser ?? (await _googleSignIn.signInSilently());
+      // 1) 저장된 세션의 access token이 아직 유효하면 그대로 사용
+      //    (토큰 갱신 불필요 — 페이지 새로고침 후에도 안정적으로 동작)
+      final sessionData = await GoogleSessionStorage.loadSession();
+      if (sessionData != null) {
+        final tokenUsable = _isUsableToken(sessionData.accessToken);
+        if (tokenUsable && !_isExpiredSession(sessionData)) {
+          final headers = {'Authorization': 'Bearer ${sessionData.accessToken}'};
+          return _AuthenticatedClient(headers, http.Client());
+        }
+        // 2) 만료/무효 토큰 → 재발급 시도
+        //    (웹: GIS Token Client silent 갱신, 모바일: 곧바로 계정 경로 폴백)
+        if (_isWebAuth) {
+          final refreshed = await _silentWebTokenRefresh(sessionData);
+          if (refreshed != null) return refreshed;
+        }
+      }
+
+      // 3) google_sign_in 계정 세션 기반 폴백
+      final account = _signedInAccount ??
+          _googleSignIn.currentUser ??
+          (await _googleSignIn.signInSilently());
       if (account != null) {
         final authHeaders = await account.authHeaders;
         final token = authHeaders['Authorization']?.replaceAll('Bearer ', '');
-        if (token != null && token.isNotEmpty) {
+        if (_isUsableToken(token)) {
           // 토큰 최신화 저장
           final currentUserObj = currentUser;
           if (currentUserObj != null) {
@@ -295,35 +438,15 @@ class GoogleAuthService {
               email: currentUserObj.email,
               displayName: currentUserObj.displayName,
               photoUrl: currentUserObj.photoUrl,
-              accessToken: token,
+              accessToken: token!,
               expiresAt: DateTime.now().add(const Duration(hours: 1)),
             ));
           }
+          return _AuthenticatedClient(authHeaders, http.Client());
         }
-        return _AuthenticatedClient(authHeaders, http.Client());
       }
     } catch (e) {
       debugPrint('GoogleAuthService getAuthenticatedClient error: $e');
-    }
-
-    // 웹 세션 보관소(localStorage)의 Access Token 활용 복원
-    final sessionData = await GoogleSessionStorage.loadSession();
-    if (sessionData != null && sessionData.accessToken.isNotEmpty) {
-      final isExpired = sessionData.expiresAt != null && DateTime.now().isAfter(sessionData.expiresAt!);
-      if (isExpired) {
-        // 만료된 경우 재로그인 / Silent auth 시도
-        try {
-          final account = await _googleSignIn.signInSilently();
-          if (account != null) {
-            final authHeaders = await account.authHeaders;
-            return _AuthenticatedClient(authHeaders, http.Client());
-          }
-        } catch (_) {}
-      } else {
-        // 토큰이 유효한 경우 보관된 Access Token으로 인증 클라이언트 제공
-        final headers = {'Authorization': 'Bearer ${sessionData.accessToken}'};
-        return _AuthenticatedClient(headers, http.Client());
-      }
     }
 
     return null;

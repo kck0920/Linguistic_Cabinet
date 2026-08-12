@@ -52,6 +52,9 @@ class GoogleDriveSyncService {
 
   Timer? _debounceTimer;
 
+  /// 진행 중인 동기화 작업 (중복 실행 방지용)
+  Future<bool>? _inFlightSync;
+
   /// 설정 DB에서 마지막 동기화 타임스탬프 가져오기
   Future<DateTime?> _getLastSyncTime() async {
     try {
@@ -94,7 +97,19 @@ class GoogleDriveSyncService {
   }
 
   /// 동기화 실행 (수동/자동 공통)
-  Future<bool> sync() async {
+  ///
+  /// 이미 진행 중인 동기화가 있으면 새 작업을 시작하지 않고 그 결과를 공유한다
+  /// (수동 버튼과 자동 debounce 동기화가 겹쳐 토큰 재발급·업로드가 중복되는 것 방지).
+  Future<bool> sync() {
+    final inFlight = _inFlightSync;
+    if (inFlight != null) return inFlight;
+    final future = _doSync();
+    _inFlightSync = future;
+    future.whenComplete(() => _inFlightSync = null);
+    return future;
+  }
+
+  Future<bool> _doSync() async {
     final currentUser = _authService.currentUser;
     if (currentUser == null) {
       debugPrint('GoogleDriveSyncService: User not signed in.');
