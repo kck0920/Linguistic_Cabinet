@@ -915,7 +915,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   Future<void> _triggerGoogleSync() async {
     setState(() => _isGoogleSyncing = true);
-    final success = await GoogleDriveSyncService().sync();
+    // 수동 동기화는 사용자 제스처이므로, 토큰 만료 시 팝업/리다이렉트 재인증을
+    // 허용해 모바일 웹에서 1시간이 지나도 연결이 유지되도록 한다.
+    final success = await GoogleDriveSyncService().sync(interactive: true);
     if (mounted) {
       setState(() => _isGoogleSyncing = false);
       if (success) {

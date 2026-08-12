@@ -100,4 +100,11 @@ class GoogleSessionStorageImpl {
       debugPrint('Error clearing Google session: $e');
     }
   }
+
+  /// 웹 리다이렉트 재인증 중 보류 중인 동기화 의도를 저장한다. (웹 전용 — 다른
+  /// 플랫폼에서는 무동작)
+  static Future<void> setPendingSync(bool pending) async {}
+
+  /// 보류 중인 동기화 의도가 있는지 조회한다. (웹 전용 — 다른 플랫폼에서는 false)
+  static Future<bool> hasPendingSync() async => false;
 }

@@ -9,10 +9,12 @@ import 'google_session_storage.dart';
 import 'google_token_refresh.dart';
 
 /// 토큰 재발급 핸들러 시그니처 (웹: GIS Token Client, 테스트: 주입 가능)
+/// [interactive]가 true면 사용자 제스처(동기화 버튼) 기반 팝업 재인증을 허용한다.
 typedef TokenRefreshHandler = Future<GoogleTokenRefreshResult?> Function({
   required String clientId,
   required List<String> scopes,
   String? loginHint,
+  bool interactive,
 });
 
 final googleUserProvider = StateNotifierProvider<GoogleUserNotifier, AsyncValue<GoogleAuthUser?>>((ref) {
@@ -99,6 +101,11 @@ class GoogleAuthService {
   /// 테스트에서 VM에서도 웹 인증 경로를 강제하는 시임
   @visibleForTesting
   bool forceWebAuthPath = false;
+
+  /// 통합 테스트(실제 브라우저)에서 팝업/리다이렉트 재인증을 끄는 시임.
+  /// 테스트 브라우저에는 실 구글 세션이 없어 재인증 팝업이 열리지 않게 한다.
+  @visibleForTesting
+  static bool suppressInteractiveReauth = false;
 
   bool get _isDesktopAuth =>
       !kIsWeb && (Platform.isLinux || Platform.isWindows) && !forceWebAuthPath;
@@ -307,14 +314,26 @@ class GoogleAuthService {
     return DateTime.now().isAfter(expiresAt.subtract(const Duration(minutes: 5)));
   }
 
-  /// 웹 전용: GIS Token Client로 새 access token을 조용히 발급받아 세션에 저장한다.
+  /// 웹 전용: GIS Token Client로 새 access token을 발급받아 세션에 저장한다.
   /// 실패 시 null. (테스트에서는 [tokenRefreshHandler]로 대체 가능)
-  Future<http.Client?> _silentWebTokenRefresh(GoogleSessionData session) async {
+  ///
+  /// [interactive] == true면 팝업 재인증을 허용한다 (모바일 브라우저는 silent
+  /// iframe 쿠키가 차단돼 있어 사용자 제스처 기반 팝업이 필요).
+  ///
+  /// 참고: GIS error.type getter는 매핑되지 않은 타입(popup_blocked 등)에서
+  /// throw해 사용자 취소(access_denied)와 환경 실패를 구분할 수 없다. 따라서
+  /// interactive 실패 시 호출자는 팝업 닫힘/거부 여부와 무관하게 리다이렉트
+  /// 폴백을 시도한다 (연결 유지가 우선).
+  Future<http.Client?> _refreshWebToken(
+    GoogleSessionData session, {
+    bool interactive = false,
+  }) async {
     final handler = tokenRefreshHandler ?? GoogleTokenRefresher.refreshAccessToken;
     final result = await handler(
       clientId: customClientId ?? '',
       scopes: _scopes,
       loginHint: session.email,
+      interactive: interactive,
     );
     if (result == null) return null;
 
@@ -330,19 +349,64 @@ class GoogleAuthService {
     return _AuthenticatedClient(headers, http.Client());
   }
 
+  /// 팝업 재인증이 차단된 환경에서 페이지 전체를 구글 OAuth로 리다이렉트한다.
+  /// 복귀 시 [persistAccessToken]으로 토큰이 저장되고, 보류 중이던 동기화가
+  /// [GoogleDriveSyncService.resumePendingSyncIfNeeded]로 재개된다.
+  Future<void> _startRedirectReauth(GoogleSessionData session) async {
+    try {
+      await GoogleSessionStorage.setPendingSync(true);
+      await GoogleTokenRefresher.startRedirectAuth(
+        clientId: customClientId ?? '',
+        scopes: _scopes,
+        loginHint: session.email,
+      );
+    } catch (e) {
+      debugPrint('GoogleAuthService startRedirectReauth error: $e');
+    }
+  }
+
+  /// 리다이렉트 재인증 복귀 시 회수한 새 토큰을 저장된 세션에 반영한다.
+  Future<void> persistAccessToken(String token, DateTime expiresAt) async {
+    try {
+      final session = await GoogleSessionStorage.loadSession();
+      if (session == null) return;
+      await GoogleSessionStorage.saveSession(GoogleSessionData(
+        id: session.id,
+        email: session.email,
+        displayName: session.displayName,
+        photoUrl: session.photoUrl,
+        accessToken: token,
+        expiresAt: expiresAt,
+      ));
+    } catch (e) {
+      debugPrint('GoogleAuthService persistAccessToken error: $e');
+    }
+  }
+
   /// 인증 실패(401 등)가 발생했을 때 새 토큰으로 재인증을 시도하고,
   /// 성공 시 새 인증 클라이언트를 반환한다. 실패 시 null.
-  Future<http.Client?> reauthenticate() async {
+  ///
+  /// [interactive] == true면 사용자 제스처 기반 팝업/리다이렉트 재인증까지
+  /// 시도한다 (모바일 웹에서 1시간 만료 후에도 동기화를 유지하기 위함).
+  Future<http.Client?> reauthenticate({bool interactive = false}) async {
     if (_isDesktopAuth) {
       return _desktopAuthenticatedClient();
     }
 
-    // 웹: GIS Token Client로 조용한 재발급 우선 시도
+    // 웹: GIS Token Client로 재발급 우선 시도 (interactive면 팝업 허용)
     if (_isWebAuth) {
       final sessionData = await GoogleSessionStorage.loadSession();
       if (sessionData != null) {
-        final client = await _silentWebTokenRefresh(sessionData);
+        final client =
+            await _refreshWebToken(sessionData, interactive: interactive);
         if (client != null) return client;
+        // 팝업 재인증이 실패하면 페이지 리다이렉트로 폴백해 모바일 브라우저
+        // (팝업 차단·쿠키 차단)에서도 동기화를 유지한다. 복귀 후 보류 동기화가
+        // 자동 재개된다. (수동 동기화·웹 한정)
+        if (interactive && !suppressInteractiveReauth) {
+          await _startRedirectReauth(sessionData);
+          return null;
+        }
       }
       // GIS 재발급이 실패한 상황에서 OneTap 재인증은 거의 실패하고
       // 예기치 않은 UI를 띄울 수 있으므로, 메모리에 방금 로그인한
@@ -398,7 +462,10 @@ class GoogleAuthService {
   }
 
   /// googleapis 패키지에서 사용할 인증 헤더가 포함된 http.Client 객체 리턴
-  Future<http.Client?> getAuthenticatedClient() async {
+  ///
+  /// [interactive] == true면 토큰 만료 시 사용자 제스처 기반 팝업/리다이렉트
+  /// 재인증까지 시도한다 (모바일 웹에서 1시간 만료 후에도 동기화를 유지하기 위함).
+  Future<http.Client?> getAuthenticatedClient({bool interactive = false}) async {
     if (_isDesktopAuth) {
       return _desktopAuthenticatedClient();
     }
@@ -415,10 +482,18 @@ class GoogleAuthService {
           return _AuthenticatedClient(headers, http.Client());
         }
         // 2) 만료/무효 토큰 → 재발급 시도
-        //    (웹: GIS Token Client silent 갱신, 모바일: 곧바로 계정 경로 폴백)
+        //    (웹: GIS Token Client 갱신, 모바일: 곧바로 계정 경로 폴백)
         if (_isWebAuth) {
-          final refreshed = await _silentWebTokenRefresh(sessionData);
+          final refreshed =
+              await _refreshWebToken(sessionData, interactive: interactive);
           if (refreshed != null) return refreshed;
+          // 팝업 재인증이 실패하면 페이지 리다이렉트로 폴백해 모바일 브라우저
+          // (팝업 차단·쿠키 차단)에서도 동기화를 유지한다. 복귀 후 보류 동기화가
+          // 자동 재개된다. (수동 동기화·웹 한정)
+          if (interactive && !suppressInteractiveReauth) {
+            await _startRedirectReauth(sessionData);
+            return null;
+          }
         }
       }
 

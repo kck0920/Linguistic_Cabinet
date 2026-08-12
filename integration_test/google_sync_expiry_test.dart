@@ -6,6 +6,7 @@ import 'package:integration_test/integration_test.dart';
 import 'package:web/web.dart' as web;
 
 import 'package:linguistic_cabinet/main.dart' as app;
+import 'package:linguistic_cabinet/shared/services/google_auth_service.dart';
 
 /// 웹 통합 테스트 — '구글 연결 후 1시간이 지나 access token이 만료된 뒤
 /// 동기화 버튼을 눌렀을 때'의 실제 브라우저(Chrome) 동작을 검증한다.
@@ -47,6 +48,9 @@ void main() {
       }),
     );
 
+    // 자동화 브라우저에는 실 구글 세션이 없어 재인증 팝업이 열리지 않도록
+    // 팝업/리다이렉트 재인증을 끈다 (우아한 실패 경로 검증에 집중).
+    GoogleAuthService.suppressInteractiveReauth = true;
     app.main();
 
     // 앱 부팅 완료 대기 — 웹에서는 GIS 스크립트 로드·DB 초기화 때문에

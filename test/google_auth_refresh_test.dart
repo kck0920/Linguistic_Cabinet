@@ -29,18 +29,25 @@ class _FakeTokenRefresher {
   _FakeTokenRefresher(this.result);
 
   final GoogleTokenRefreshResult? result;
-  final List<({String clientId, List<String> scopes, String? loginHint})> calls =
-      [];
+  final List<
+      ({
+        String clientId,
+        List<String> scopes,
+        String? loginHint,
+        bool interactive,
+      })> calls = [];
 
   Future<GoogleTokenRefreshResult?> call({
     required String clientId,
     required List<String> scopes,
     String? loginHint,
+    bool interactive = false,
   }) async {
     calls.add((
       clientId: clientId,
       scopes: List.unmodifiable(scopes),
       loginHint: loginHint,
+      interactive: interactive,
     ));
     return result;
   }
@@ -265,6 +272,67 @@ void main() {
       expect(refresher.calls, hasLength(1));
       final saved = await GoogleSessionStorage.loadSession();
       expect(saved?.accessToken, 'token-reauth-000');
+    });
+  });
+
+  group('GoogleAuthService — interactive 팝업 재인증 & 리다이렉트 복귀', () {
+    test('수동 동기화(interactive)는 핸들러에 interactive=true로 전달된다', () async {
+      final auth = GoogleAuthService();
+      final refresher = _FakeTokenRefresher(GoogleTokenRefreshResult(
+        accessToken: 'token-interactive-1',
+        expiresAt: DateTime.now().add(const Duration(hours: 1)),
+      ));
+      auth.tokenRefreshHandler = refresher.call;
+
+      await GoogleSessionStorage.saveSession(_session(
+        token: 'token-expired',
+        expiresAt: DateTime.now().subtract(const Duration(hours: 1)),
+      ));
+
+      // 사용자 제스처(동기화 버튼) 경로 — interactive 팝업 재인증 허용
+      final client = await auth.getAuthenticatedClient(interactive: true);
+
+      expect(client, isNotNull);
+      expect(refresher.calls.single.interactive, isTrue);
+      final saved = await GoogleSessionStorage.loadSession();
+      expect(saved?.accessToken, 'token-interactive-1');
+    });
+
+    test('자동 동기화(비interactive)는 핸들러에 interactive=false로 전달된다', () async {
+      final auth = GoogleAuthService();
+      final refresher = _FakeTokenRefresher(GoogleTokenRefreshResult(
+        accessToken: 'token-silent-1',
+        expiresAt: DateTime.now().add(const Duration(hours: 1)),
+      ));
+      auth.tokenRefreshHandler = refresher.call;
+
+      await GoogleSessionStorage.saveSession(_session(
+        token: 'token-expired',
+        expiresAt: DateTime.now().subtract(const Duration(hours: 1)),
+      ));
+
+      final client = await auth.getAuthenticatedClient();
+
+      expect(client, isNotNull);
+      expect(refresher.calls.single.interactive, isFalse);
+    });
+
+    test('리다이렉트 복귀 토큰(persistAccessToken)이 저장 세션에 반영된다', () async {
+      final auth = GoogleAuthService();
+
+      await GoogleSessionStorage.saveSession(_session(
+        token: 'token-old',
+        expiresAt: DateTime.now().subtract(const Duration(hours: 1)),
+      ));
+
+      final newExpiry = DateTime.now().add(const Duration(hours: 1));
+      await auth.persistAccessToken('token-redirect-1', newExpiry);
+
+      final saved = await GoogleSessionStorage.loadSession();
+      expect(saved?.accessToken, 'token-redirect-1');
+      // 유저 정보(id/email)는 그대로 유지 — 연결 상태가 끊기지 않는다.
+      expect(saved?.email, 'user@example.com');
+      expect(saved?.expiresAt?.millisecondsSinceEpoch, newExpiry.millisecondsSinceEpoch);
     });
   });
 }

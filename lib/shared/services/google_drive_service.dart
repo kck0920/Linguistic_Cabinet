@@ -28,8 +28,14 @@ class GoogleDriveService {
 
   /// Drive API 호출을 감싸 인증 실패(401) 시 재인증 후 1회 재시도한다.
   /// 인증 실패·재인증 불가 시 null을 반환한다.
-  Future<T?> _withAuthRetry<T>(Future<T?> Function(drive.DriveApi api) action) async {
-    var client = await _authService.getAuthenticatedClient();
+  ///
+  /// [interactive] == true면 토큰 만료 시 사용자 제스처 기반 팝업/리다이렉트
+  /// 재인증까지 허용한다 (모바일 웹 1시간 만료 시나리오 대응).
+  Future<T?> _withAuthRetry<T>(
+    Future<T?> Function(drive.DriveApi api) action, {
+    bool interactive = false,
+  }) async {
+    var client = await _authService.getAuthenticatedClient(interactive: interactive);
     if (client == null) {
       debugPrint('GoogleDriveService: No authenticated client.');
       return null;
@@ -39,7 +45,7 @@ class GoogleDriveService {
     } on drive.DetailedApiRequestError catch (e) {
       if (e.status == 401) {
         debugPrint('GoogleDriveService: Auth error (401), re-authenticating...');
-        final newClient = await _authService.reauthenticate();
+        final newClient = await _authService.reauthenticate(interactive: interactive);
         if (newClient != null) {
           try {
             return await action(drive.DriveApi(newClient));
@@ -59,9 +65,10 @@ class GoogleDriveService {
   }
 
   /// App Data 폴더에 있는 `vocatree.db` 메타데이터 검색
-  Future<DriveFileMetadata?> getRemoteDatabaseMetadata() async {
+  Future<DriveFileMetadata?> getRemoteDatabaseMetadata({bool interactive = false}) async {
     try {
-      return await _withAuthRetry<DriveFileMetadata>((driveApi) async {
+      return await _withAuthRetry<DriveFileMetadata>(
+        (driveApi) async {
         final fileList = await driveApi.files.list(
           spaces: 'appDataFolder',
           q: "name = '$_dbFileName' and 'appDataFolder' in parents and trashed = false",
@@ -80,7 +87,9 @@ class GoogleDriveService {
           }
         }
         return null;
-      });
+      },
+        interactive: interactive,
+      );
     } catch (e) {
       debugPrint('GoogleDriveService getRemoteDatabaseMetadata Error: $e');
       return null;
@@ -88,10 +97,11 @@ class GoogleDriveService {
   }
 
   /// 구글 드라이브에서 `vocatree.db` 파일 바이트 다운로드
-  Future<List<int>?> downloadDatabase() async {
+  Future<List<int>?> downloadDatabase({bool interactive = false}) async {
     try {
-      return await _withAuthRetry<List<int>>((driveApi) async {
-        final metadata = await getRemoteDatabaseMetadata();
+      return await _withAuthRetry<List<int>>(
+        (driveApi) async {
+        final metadata = await getRemoteDatabaseMetadata(interactive: interactive);
         if (metadata == null) return null;
 
         final dynamic response = await driveApi.files.get(
@@ -107,7 +117,9 @@ class GoogleDriveService {
           return bytes;
         }
         return null;
-      });
+      },
+        interactive: interactive,
+      );
     } catch (e) {
       debugPrint('GoogleDriveService downloadDatabase Error: $e');
       return null;
@@ -115,10 +127,11 @@ class GoogleDriveService {
   }
 
   /// 구글 드라이브로 `vocatree.db` 파일 바이너리 업로드
-  Future<DriveFileMetadata?> uploadDatabase(List<int> bytes) async {
+  Future<DriveFileMetadata?> uploadDatabase(List<int> bytes, {bool interactive = false}) async {
     try {
-      return await _withAuthRetry<DriveFileMetadata>((driveApi) async {
-        final existingFile = await getRemoteDatabaseMetadata();
+      return await _withAuthRetry<DriveFileMetadata>(
+        (driveApi) async {
+        final existingFile = await getRemoteDatabaseMetadata(interactive: interactive);
         final mediaStream = Stream.value(bytes);
         final media = drive.Media(mediaStream, bytes.length);
 
@@ -154,7 +167,9 @@ class GoogleDriveService {
             size: bytes.length,
           );
         }
-      });
+      },
+        interactive: interactive,
+      );
     } catch (e) {
       debugPrint('GoogleDriveService uploadDatabase Error: $e');
       return null;

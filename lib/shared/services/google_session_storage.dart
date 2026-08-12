@@ -11,4 +11,6 @@ class GoogleSessionStorage {
   static Future<void> saveSession(GoogleSessionData session) => impl.GoogleSessionStorageImpl.saveSession(session);
   static Future<GoogleSessionData?> loadSession() => impl.GoogleSessionStorageImpl.loadSession();
   static Future<void> clearSession() => impl.GoogleSessionStorageImpl.clearSession();
+  static Future<void> setPendingSync(bool pending) => impl.GoogleSessionStorageImpl.setPendingSync(pending);
+  static Future<bool> hasPendingSync() => impl.GoogleSessionStorageImpl.hasPendingSync();
 }
