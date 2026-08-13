@@ -349,23 +349,9 @@ class GoogleAuthService {
     return _AuthenticatedClient(headers, http.Client());
   }
 
-  /// 팝업 재인증이 차단된 환경에서 페이지 전체를 구글 OAuth로 리다이렉트한다.
-  /// 복귀 시 [persistAccessToken]으로 토큰이 저장되고, 보류 중이던 동기화가
-  /// [GoogleDriveSyncService.resumePendingSyncIfNeeded]로 재개된다.
-  Future<void> _startRedirectReauth(GoogleSessionData session) async {
-    try {
-      await GoogleSessionStorage.setPendingSync(true);
-      await GoogleTokenRefresher.startRedirectAuth(
-        clientId: customClientId ?? '',
-        scopes: _scopes,
-        loginHint: session.email,
-      );
-    } catch (e) {
-      debugPrint('GoogleAuthService startRedirectReauth error: $e');
-    }
-  }
-
   /// 리다이렉트 재인증 복귀 시 회수한 새 토큰을 저장된 세션에 반영한다.
+  /// (리다이렉트 재인증은 redirect_uri 미등록으로 현재 비활성화되어 있으나,
+  ///  main.dart의 consumeRedirectResult 복귀 핸들러와 호환을 위해 유지)
   Future<void> persistAccessToken(String token, DateTime expiresAt) async {
     try {
       final session = await GoogleSessionStorage.loadSession();
@@ -386,20 +372,27 @@ class GoogleAuthService {
   /// 인증 실패(401 등)가 발생했을 때 새 토큰으로 재인증을 시도하고,
   /// 성공 시 새 인증 클라이언트를 반환한다. 실패 시 null.
   ///
-  /// [interactive] == true면 사용자 제스처 기반 팝업/리다이렉트 재인증까지
-  /// 시도한다 (모바일 웹에서 1시간 만료 후에도 동기화를 유지하기 위함).
+  /// [interactive] == true면 사용자 제스처 기반 팝업 재인증까지 시도한다
+  /// (모바일 웹에서 1시간 만료 후에도 동기화를 유지하기 위함).
+  /// 리다이렉트 재인증은 사용하지 않는다 (redirect_uri 미등록 시 400 에러 방지).
   Future<http.Client?> reauthenticate({bool interactive = false}) async {
     if (_isDesktopAuth) {
       return _desktopAuthenticatedClient();
     }
 
-    // 웹: GIS Token Client로 조용히(Silent) 재발급 시도 (팝업/리다이렉트 400 에러 창 노출 전면 차단)
+    // 웹: GIS Token Client로 재발급 시도
     if (_isWebAuth) {
       final sessionData = await GoogleSessionStorage.loadSession();
       if (sessionData != null) {
-        // 400 invalid_request 리다이렉트 창이 뜨는 것을 완전 차단하기 위해 interactive 여부와 상관없이 prompt: '' (Silent)로만 갱신
-        final client = await _refreshWebToken(sessionData, interactive: false);
-        if (client != null) return client;
+        // 1) 먼저 항상 silent(prompt: '')로 시도
+        final silentClient = await _refreshWebToken(sessionData, interactive: false);
+        if (silentClient != null) return silentClient;
+
+        // 2) silent 실패 + interactive → 팝업(prompt: null)으로 재시도
+        if (interactive && !suppressInteractiveReauth) {
+          final popupClient = await _refreshWebToken(sessionData, interactive: true);
+          if (popupClient != null) return popupClient;
+        }
       }
       if (_signedInAccount == null) return null;
     }
@@ -453,8 +446,9 @@ class GoogleAuthService {
 
   /// googleapis 패키지에서 사용할 인증 헤더가 포함된 http.Client 객체 리턴
   ///
-  /// [interactive] == true면 토큰 만료 시 사용자 제스처 기반 팝업/리다이렉트
-  /// 재인증까지 시도한다 (모바일 웹에서 1시간 만료 후에도 동기화를 유지하기 위함).
+  /// [interactive] == true면 토큰 만료 시 사용자 제스처 기반 팝업 재인증까지
+  /// 시도한다 (모바일 웹에서 1시간 만료 후에도 동기화를 유지하기 위함).
+  /// 리다이렉트 재인증은 사용하지 않는다 (redirect_uri 미등록 시 400 에러 방지).
   Future<http.Client?> getAuthenticatedClient({bool interactive = false}) async {
     if (_isDesktopAuth) {
       return _desktopAuthenticatedClient();
@@ -471,18 +465,21 @@ class GoogleAuthService {
           final headers = {'Authorization': 'Bearer ${sessionData.accessToken}'};
           return _AuthenticatedClient(headers, http.Client());
         }
-        // 2) 만료/무효 토큰 → 재발급 시도
-        //    (웹: GIS Token Client 갱신, 모바일: 곧바로 계정 경로 폴백)
+        // 2) 만료/무효 토큰 → GIS Token Client로 재발급 시도
         if (_isWebAuth) {
-          final refreshed =
-              await _refreshWebToken(sessionData, interactive: interactive);
-          if (refreshed != null) return refreshed;
-          // 팝업 재인증이 실패하면 페이지 리다이렉트로 폴백해 모바일 브라우저
-          // (팝업 차단·쿠키 차단)에서도 동기화를 유지한다. 복귀 후 보류 동기화가
-          // 자동 재개된다. (수동 동기화·웹 한정)
+          // 2-a) 먼저 항상 silent(prompt: '')로 시도 — 동일 브라우저 세션이면
+          //      팝업/리다이렉트 없이 조용히 갱신 가능
+          final silentRefreshed =
+              await _refreshWebToken(sessionData, interactive: false);
+          if (silentRefreshed != null) return silentRefreshed;
+
+          // 2-b) silent 실패 + 사용자 제스처(interactive) → 팝업(prompt: null)
+          //      으로 재시도. 팝업이 차단되거나 실패해도 리다이렉트로 넘어가지
+          //      않고, 아래 google_sign_in 폴백으로 자연스럽게 이어진다.
           if (interactive && !suppressInteractiveReauth) {
-            await _startRedirectReauth(sessionData);
-            return null;
+            final popupRefreshed =
+                await _refreshWebToken(sessionData, interactive: true);
+            if (popupRefreshed != null) return popupRefreshed;
           }
         }
       }
