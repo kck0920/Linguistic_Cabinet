@@ -19,7 +19,7 @@ module.exports = async (req, res) => {
   }
 
   try {
-    const { code } = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {});
+    const { code, redirect_uri } = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {});
     if (!code) {
       return res.status(400).json({ error: 'Authorization code is required' });
     }
@@ -28,7 +28,7 @@ module.exports = async (req, res) => {
       code,
       client_id: CLIENT_ID,
       client_secret: CLIENT_SECRET,
-      redirect_uri: 'postmessage', // GIS Popup mode 필수
+      redirect_uri: redirect_uri || 'postmessage', // GIS Popup mode는 'postmessage', Redirect mode는 클라이언트 origin URI
       grant_type: 'authorization_code',
     });
 

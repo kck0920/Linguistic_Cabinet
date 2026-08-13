@@ -265,6 +265,37 @@ class GoogleAuthService {
         _userController.add(user);
       }
 
+      // 웹 모바일/리다이렉트 복귀 시 authorization_code가 수신된 경우 자동 토큰 교환
+      if (_isWebAuth) {
+        final redirectCode = GoogleTokenRefresher.consumeRedirectCode();
+        if (redirectCode != null && redirectCode.isNotEmpty) {
+          final serverResult = await GoogleTokenRefresher.exchangeAuthCode(redirectCode);
+          if (serverResult != null) {
+            final userMap = serverResult.userMap;
+            final user = GoogleAuthUser(
+              id: userMap?['id'] as String? ?? 'user_${DateTime.now().millisecondsSinceEpoch}',
+              email: userMap?['email'] as String? ?? 'google_user@gmail.com',
+              displayName: userMap?['name'] as String?,
+              photoUrl: userMap?['picture'] as String?,
+            );
+            _savedWebUser = user;
+
+            await GoogleSessionStorage.saveSession(GoogleSessionData(
+              id: user.id,
+              email: user.email,
+              displayName: user.displayName,
+              photoUrl: user.photoUrl,
+              accessToken: serverResult.accessToken,
+              encryptedRefreshToken: serverResult.encryptedRefreshToken,
+              expiresAt: serverResult.expiresAt,
+            ));
+
+            _userController.add(user);
+            return user;
+          }
+        }
+      }
+
       try {
         final account = await _googleSignIn.signInSilently();
         if (account != null) {

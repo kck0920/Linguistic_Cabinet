@@ -38,7 +38,6 @@
   <!-- Google Identity Services & OAuth Client ID -->
   <meta name="google-signin-client_id" content="1002909356316-llhqdfguevm9je83uhtdqblgm5621ra1.apps.googleusercontent.com">
   <script src="https://accounts.google.com/gsi/client" async defer></script>
-  <!-- GIS Code Client Helper for Authorization Code Flow -->
   <script>
     window.requestGoogleAuthCode = function(clientId, scopesStr, callback) {
       if (!window.google || !window.google.accounts || !window.google.accounts.oauth2) {
@@ -47,12 +46,42 @@
         return;
       }
       try {
+        var isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+        var currentOrigin = window.location.origin + window.location.pathname;
+
+        // 모바일 브라우저인 경우 팝업 차단을 피하기 위해 ux_mode: 'redirect' 사용
+        if (isMobile) {
+          console.log("Mobile browser detected. Using ux_mode: redirect");
+          sessionStorage.setItem('voca_pending_auth', '1');
+          var redirectClient = google.accounts.oauth2.initCodeClient({
+            client_id: clientId,
+            scope: scopesStr,
+            ux_mode: 'redirect',
+            redirect_uri: currentOrigin,
+          });
+          redirectClient.requestCode();
+          return;
+        }
+
+        // 데스크톱 브라우저는 ux_mode: 'popup'
         var client = google.accounts.oauth2.initCodeClient({
           client_id: clientId,
           scope: scopesStr,
           ux_mode: 'popup',
           callback: function(response) {
             if (response.error) {
+              if (response.error === 'popup_failed_to_open' || response.error === 'popup_closed') {
+                console.warn("Popup blocked or failed. Fallback to ux_mode: redirect");
+                sessionStorage.setItem('voca_pending_auth', '1');
+                var fallbackClient = google.accounts.oauth2.initCodeClient({
+                  client_id: clientId,
+                  scope: scopesStr,
+                  ux_mode: 'redirect',
+                  redirect_uri: currentOrigin,
+                });
+                fallbackClient.requestCode();
+                return;
+              }
               callback(null, response.error);
             } else if (response.code) {
               callback(response.code, null);
@@ -61,13 +90,40 @@
             }
           },
           error_callback: function(err) {
-            callback(null, err ? (err.message || JSON.stringify(err)) : "Unknown error");
+            console.warn("GIS error_callback:", err);
+            // 팝업 실패 시 redirect 모드로 차선책 시도
+            sessionStorage.setItem('voca_pending_auth', '1');
+            var fallbackClient = google.accounts.oauth2.initCodeClient({
+              client_id: clientId,
+              scope: scopesStr,
+              ux_mode: 'redirect',
+              redirect_uri: currentOrigin,
+            });
+            fallbackClient.requestCode();
           }
         });
         client.requestCode();
       } catch (e) {
         callback(null, e.toString());
       }
+    };
+
+    // 모바일/리다이렉트 복귀 시 URL 쿼리 파라미터(?code=...)에서 authorization_code 회수
+    window.consumeRedirectCode = function() {
+      try {
+        var urlParams = new URLSearchParams(window.location.search);
+        var code = urlParams.get('code');
+        if (code) {
+          // URL 정리 (Query string 제거)
+          var cleanUrl = window.location.origin + window.location.pathname + window.location.hash;
+          window.history.replaceState({}, document.title, cleanUrl);
+          sessionStorage.removeItem('voca_pending_auth');
+          return code;
+        }
+      } catch (e) {
+        console.error("Error consuming redirect code:", e);
+      }
+      return null;
     };
   </script>
   <script src="flutter_bootstrap.js" async></script>

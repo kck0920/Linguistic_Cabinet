@@ -29,6 +29,8 @@ class GoogleTokenRefresher {
     bool interactive = false,
   }) async => null;
 
+  static String? consumeRedirectCode() => null;
+
   /// 웹: GIS initCodeClient 팝업을 통해 authorization_code를 수신한다.
   static Future<String?> requestAuthCode({
     required String clientId,
@@ -40,7 +42,7 @@ class GoogleTokenRefresher {
 
   /// Vercel Serverless Function `/api/google/connect`로 authorization_code를 전달하여
   /// 세션 쿠키/암호화 토큰 및 초기 access_token을 받는다.
-  static Future<GoogleServerAuthResult?> exchangeAuthCode(String code) async {
+  static Future<GoogleServerAuthResult?> exchangeAuthCode(String code, {String? redirectUri}) async {
     debugPrint('GoogleTokenRefresher.exchangeAuthCode: Not supported on this platform.');
     return null;
   }

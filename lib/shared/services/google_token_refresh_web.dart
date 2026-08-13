@@ -12,9 +12,24 @@ external void _requestGoogleAuthCode(
   JSFunction callback,
 );
 
+@JS('consumeRedirectCode')
+external JSString? _consumeRedirectCode();
+
 class GoogleTokenRefresher {
-  /// 웹: GIS initCodeClient 팝업을 통해 authorization_code를 수신한다.
-  /// 사용자 클릭 핸들러 직후 호출하여 브라우저 팝업 차단을 방지한다.
+  /// 모바일/리다이렉트 복귀 시 URL 쿼리스트링에서 authorization_code 회수
+  static String? consumeRedirectCode() {
+    try {
+      final codeObj = _consumeRedirectCode();
+      if (codeObj != null && codeObj.toDart.isNotEmpty) {
+        return codeObj.toDart;
+      }
+    } catch (e) {
+      debugPrint('consumeRedirectCode error: $e');
+    }
+    return null;
+  }
+
+  /// 웹: GIS initCodeClient 팝업/리다이렉트를 통해 authorization_code를 수신한다.
   static Future<String?> requestAuthCode({
     required String clientId,
     required List<String> scopes,
@@ -56,16 +71,24 @@ class GoogleTokenRefresher {
   }
 
   /// Vercel Serverless Function `/api/google/connect` 호출
-  /// - authorization_code 교환
-  /// - HttpOnly 쿠키(voca_session) 설정 및 encrypted_refresh_token, initial access_token 수신
-  static Future<GoogleServerAuthResult?> exchangeAuthCode(String code) async {
+  /// - authorization_code 교환 (redirectUri 지원)
+  static Future<GoogleServerAuthResult?> exchangeAuthCode(String code, {String? redirectUri}) async {
     try {
+      final bodyMap = <String, dynamic>{'code': code};
+      if (redirectUri != null && redirectUri.isNotEmpty) {
+        bodyMap['redirect_uri'] = redirectUri;
+      } else {
+        final origin = web.window.location.origin;
+        final pathname = web.window.location.pathname;
+        bodyMap['redirect_uri'] = origin + pathname;
+      }
+
       final response = await web.window.fetch(
         '/api/google/connect'.toJS,
         web.RequestInit(
           method: 'POST',
           headers: web.Headers({'Content-Type': 'application/json'}.jsify() as JSObject),
-          body: jsonEncode({'code': code}).toJS,
+          body: jsonEncode(bodyMap).toJS,
           credentials: 'include', // HttpOnly Cookie 저장을 위해 필수
         ),
       ).toDart;
