@@ -35,7 +35,7 @@ class GoogleDriveService {
     Future<T?> Function(drive.DriveApi api) action, {
     bool interactive = false,
   }) async {
-    var client = await _authService.getAuthenticatedClient(interactive: interactive);
+    var client = await _authService.getAuthenticatedClient(interactive: false);
     if (client == null) {
       debugPrint('GoogleDriveService: No authenticated client.');
       return null;
@@ -45,7 +45,7 @@ class GoogleDriveService {
     } on drive.DetailedApiRequestError catch (e) {
       if (e.status == 401) {
         debugPrint('GoogleDriveService: Auth error (401), re-authenticating...');
-        final newClient = await _authService.reauthenticate(interactive: interactive);
+        final newClient = await _authService.reauthenticate(interactive: false);
         if (newClient != null) {
           try {
             return await action(drive.DriveApi(newClient));
