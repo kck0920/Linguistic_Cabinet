@@ -1,0 +1,70 @@
+const { decrypt } = require('../_utils/crypto');
+const { parseCookies } = require('../_utils/cookie');
+
+const CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '1002909356316-llhqdfguevm9je83uhtdqblgm5621ra1.apps.googleusercontent.com';
+const CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || '';
+
+module.exports = async (req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    const cookies = parseCookies(req);
+    const { encrypted_refresh_token: bodyToken } = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {});
+
+    // 1차: HttpOnly Cookie, 2차: Request Body
+    const encryptedToken = cookies.voca_session || bodyToken;
+
+    if (!encryptedToken) {
+      return res.status(401).json({ error: 'unauthorized', error_description: 'No session cookie or token provided' });
+    }
+
+    const refreshToken = decrypt(encryptedToken);
+    if (!refreshToken) {
+      return res.status(401).json({ error: 'invalid_grant', error_description: 'Failed to decrypt refresh token' });
+    }
+
+    const params = new URLSearchParams({
+      refresh_token: refreshToken,
+      client_id: CLIENT_ID,
+      client_secret: CLIENT_SECRET,
+      grant_type: 'refresh_token',
+    });
+
+    const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: params.toString(),
+    });
+
+    const tokenData = await tokenRes.json();
+
+    if (!tokenRes.ok || tokenData.error) {
+      console.error('Google token refresh error:', tokenData);
+      return res.status(401).json({
+        error: tokenData.error || 'invalid_grant',
+        error_description: tokenData.error_description || 'Failed to refresh token',
+      });
+    }
+
+    const { access_token, expires_in } = tokenData;
+
+    return res.status(200).json({
+      access_token,
+      expires_in: expires_in || 3600,
+    });
+  } catch (err) {
+    console.error('API /token error:', err);
+    return res.status(500).json({ error: 'Internal server error', details: err.message });
+  }
+};

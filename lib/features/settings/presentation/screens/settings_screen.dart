@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/cabinet_colors.dart';
@@ -879,7 +880,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             subtitle: Text(user.email, style: theme.bodySans.copyWith(fontSize: 12, color: colors.ink3)),
           ),
           const SizedBox(height: 8),
-          Row(
+            Row(
             children: [
               Expanded(
                 child: CabinetBrutalButton(
@@ -907,6 +908,21 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
             ],
           ),
+          if (kDebugMode) ...[
+            const SizedBox(height: 8),
+            TextButton.icon(
+              onPressed: () async {
+                await GoogleAuthService().forceExpireAccessToken();
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('[디버그] 토큰이 강제로 만료 처리되었습니다. "지금 동기화"를 눌러 갱신을 테스트하세요.')),
+                  );
+                }
+              },
+              icon: const Icon(Icons.timer_off, size: 14),
+              label: const Text('토큰 만료 테스트 (디버그)', style: TextStyle(fontSize: 12)),
+            ),
+          ],
         ],
         const Divider(height: 24),
       ],

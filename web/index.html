@@ -38,16 +38,38 @@
   <!-- Google Identity Services & OAuth Client ID -->
   <meta name="google-signin-client_id" content="1002909356316-llhqdfguevm9je83uhtdqblgm5621ra1.apps.googleusercontent.com">
   <script src="https://accounts.google.com/gsi/client" async defer></script>
-</head>
-<body>
-  <!--
-    You can customize the "flutter_bootstrap.js" script.
-    This is useful to provide a custom configuration to the Flutter loader
-    or to give the user feedback during the initialization process.
-
-    For more details:
-    * https://docs.flutter.dev/platform-integration/web/initialization
-  -->
+  <!-- GIS Code Client Helper for Authorization Code Flow -->
+  <script>
+    window.requestGoogleAuthCode = function(clientId, scopesStr, callback) {
+      if (!window.google || !window.google.accounts || !window.google.accounts.oauth2) {
+        console.error("GIS not loaded yet");
+        callback(null, "GIS SDK not loaded");
+        return;
+      }
+      try {
+        var client = google.accounts.oauth2.initCodeClient({
+          client_id: clientId,
+          scope: scopesStr,
+          ux_mode: 'popup',
+          callback: function(response) {
+            if (response.error) {
+              callback(null, response.error);
+            } else if (response.code) {
+              callback(response.code, null);
+            } else {
+              callback(null, "No code received");
+            }
+          },
+          error_callback: function(err) {
+            callback(null, err ? (err.message || JSON.stringify(err)) : "Unknown error");
+          }
+        });
+        client.requestCode();
+      } catch (e) {
+        callback(null, e.toString());
+      }
+    };
+  </script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>

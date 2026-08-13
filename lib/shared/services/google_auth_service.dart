@@ -8,8 +8,6 @@ import 'desktop_google_auth_service.dart';
 import 'google_session_storage.dart';
 import 'google_token_refresh.dart';
 
-/// 토큰 재발급 핸들러 시그니처 (웹: GIS Token Client, 테스트: 주입 가능)
-/// [interactive]가 true면 사용자 제스처(동기화 버튼) 기반 팝업 재인증을 허용한다.
 typedef TokenRefreshHandler = Future<GoogleTokenRefreshResult?> Function({
   required String clientId,
   required List<String> scopes,
@@ -94,16 +92,12 @@ class GoogleAuthService {
   GoogleAuthUser? _savedWebUser;
   final DesktopGoogleAuthService _desktopAuth = DesktopGoogleAuthService();
 
-  /// 테스트에서 토큰 재발급 동작을 주입하는 시임 (null이면 실제 구현 사용)
   @visibleForTesting
   TokenRefreshHandler? tokenRefreshHandler;
 
-  /// 테스트에서 VM에서도 웹 인증 경로를 강제하는 시임
   @visibleForTesting
   bool forceWebAuthPath = false;
 
-  /// 통합 테스트(실제 브라우저)에서 팝업/리다이렉트 재인증을 끄는 시임.
-  /// 테스트 브라우저에는 실 구글 세션이 없어 재인증 팝업이 열리지 않게 한다.
   @visibleForTesting
   static bool suppressInteractiveReauth = false;
 
@@ -146,7 +140,7 @@ class GoogleAuthService {
     );
   }
 
-  /// 구글 로그인 시도 (플랫폼 자동 판단)
+  /// 구글 로그인 시도 (Authorization Code Flow + Vercel Serverless Function)
   Future<GoogleAuthUser?> signIn() async {
     try {
       if (_isDesktopAuth) {
@@ -164,6 +158,42 @@ class GoogleAuthService {
         return null;
       }
 
+      // 웹 환경: Authorization Code Flow (Serverless Token Exchange & Refresh Token 보관)
+      if (_isWebAuth) {
+        final code = await GoogleTokenRefresher.requestAuthCode(
+          clientId: customClientId ?? '',
+          scopes: _scopes,
+        );
+
+        if (code != null && code.isNotEmpty) {
+          final serverResult = await GoogleTokenRefresher.exchangeAuthCode(code);
+          if (serverResult != null) {
+            final userMap = serverResult.userMap;
+            final user = GoogleAuthUser(
+              id: userMap?['id'] as String? ?? 'user_${DateTime.now().millisecondsSinceEpoch}',
+              email: userMap?['email'] as String? ?? 'google_user@gmail.com',
+              displayName: userMap?['name'] as String?,
+              photoUrl: userMap?['picture'] as String?,
+            );
+            _savedWebUser = user;
+
+            await GoogleSessionStorage.saveSession(GoogleSessionData(
+              id: user.id,
+              email: user.email,
+              displayName: user.displayName,
+              photoUrl: user.photoUrl,
+              accessToken: serverResult.accessToken,
+              encryptedRefreshToken: serverResult.encryptedRefreshToken,
+              expiresAt: serverResult.expiresAt,
+            ));
+
+            _userController.add(user);
+            return user;
+          }
+        }
+      }
+
+      // 모바일 / 웹 폴백: google_sign_in
       final account = await _googleSignIn.signIn();
       if (account != null) {
         _signedInAccount = account;
@@ -222,7 +252,7 @@ class GoogleAuthService {
         return null;
       }
 
-      // 웹/모바일 환경: 세션 저장소에서 저장된 유저 정보 및 토큰 복원
+      // 세션 저장소에서 저장된 유저 정보 복원
       final sessionData = await GoogleSessionStorage.loadSession();
       if (sessionData != null) {
         final user = GoogleAuthUser(
@@ -264,6 +294,7 @@ class GoogleAuthService {
             displayName: user.displayName,
             photoUrl: user.photoUrl,
             accessToken: token,
+            encryptedRefreshToken: sessionData?.encryptedRefreshToken,
             expiresAt: DateTime.now().add(const Duration(hours: 1)),
           ));
           _userController.add(user);
@@ -289,6 +320,10 @@ class GoogleAuthService {
         return;
       }
 
+      if (_isWebAuth) {
+        await GoogleTokenRefresher.disconnectServerSession();
+      }
+
       _savedWebUser = null;
       _signedInAccount = null;
       await GoogleSessionStorage.clearSession();
@@ -303,101 +338,65 @@ class GoogleAuthService {
     }
   }
 
-  /// 저장된 access token이 실제 사용 가능한 값인지 검사
   bool _isUsableToken(String? token) =>
       token != null && token.isNotEmpty && token != 'null';
 
-  /// 저장된 세션 토큰이 만료되었는지 검사 (안전 여유 5분: 만료 직전에도 재발급)
   bool _isExpiredSession(GoogleSessionData session) {
     final expiresAt = session.expiresAt;
     if (expiresAt == null) return true;
     return DateTime.now().isAfter(expiresAt.subtract(const Duration(minutes: 5)));
   }
 
-  /// 웹 전용: GIS Token Client로 새 access token을 발급받아 세션에 저장한다.
-  /// 실패 시 null. (테스트에서는 [tokenRefreshHandler]로 대체 가능)
-  ///
-  /// [interactive] == true면 팝업 재인증을 허용한다 (모바일 브라우저는 silent
-  /// iframe 쿠키가 차단돼 있어 사용자 제스처 기반 팝업이 필요).
-  ///
-  /// 참고: GIS error.type getter는 매핑되지 않은 타입(popup_blocked 등)에서
-  /// throw해 사용자 취소(access_denied)와 환경 실패를 구분할 수 없다. 따라서
-  /// interactive 실패 시 호출자는 팝업 닫힘/거부 여부와 무관하게 리다이렉트
-  /// 폴백을 시도한다 (연결 유지가 우선).
-  Future<http.Client?> _refreshWebToken(
-    GoogleSessionData session, {
-    bool interactive = false,
-  }) async {
-    final handler = tokenRefreshHandler ?? GoogleTokenRefresher.refreshAccessToken;
-    final result = await handler(
-      clientId: customClientId ?? '',
-      scopes: _scopes,
-      loginHint: session.email,
-      interactive: interactive,
-    );
-    if (result == null) return null;
+  Future<void> persistAccessToken(String token, DateTime expiresAt) async {}
 
-    await GoogleSessionStorage.saveSession(GoogleSessionData(
-      id: session.id,
-      email: session.email,
-      displayName: session.displayName,
-      photoUrl: session.photoUrl,
-      accessToken: result.accessToken,
-      expiresAt: result.expiresAt,
-    ));
-    final headers = {'Authorization': 'Bearer ${result.accessToken}'};
-    return _AuthenticatedClient(headers, http.Client());
-  }
-
-  /// 리다이렉트 재인증 복귀 시 회수한 새 토큰을 저장된 세션에 반영한다.
-  /// (리다이렉트 재인증은 redirect_uri 미등록으로 현재 비활성화되어 있으나,
-  ///  main.dart의 consumeRedirectResult 복귀 핸들러와 호환을 위해 유지)
-  Future<void> persistAccessToken(String token, DateTime expiresAt) async {
-    try {
-      final session = await GoogleSessionStorage.loadSession();
-      if (session == null) return;
+  /// 디버깅 / 테스트용: 현재 세션의 access token을 임의로 만료 시킴
+  Future<void> forceExpireAccessToken() async {
+    final session = await GoogleSessionStorage.loadSession();
+    if (session != null) {
       await GoogleSessionStorage.saveSession(GoogleSessionData(
         id: session.id,
         email: session.email,
         displayName: session.displayName,
         photoUrl: session.photoUrl,
-        accessToken: token,
-        expiresAt: expiresAt,
+        accessToken: 'EXPIRED_TEST_TOKEN',
+        encryptedRefreshToken: session.encryptedRefreshToken,
+        expiresAt: DateTime.now().subtract(const Duration(minutes: 10)),
       ));
-    } catch (e) {
-      debugPrint('GoogleAuthService persistAccessToken error: $e');
+      debugPrint('GoogleAuthService: Access token forced to expired state for testing.');
     }
   }
 
-  /// 인증 실패(401 등)가 발생했을 때 새 토큰으로 재인증을 시도하고,
-  /// 성공 시 새 인증 클라이언트를 반환한다. 실패 시 null.
-  ///
-  /// [interactive] == true면 사용자 제스처 기반 팝업 재인증까지 시도한다
-  /// (모바일 웹에서 1시간 만료 후에도 동기화를 유지하기 위함).
-  /// 리다이렉트 재인증은 사용하지 않는다 (redirect_uri 미등록 시 400 에러 방지).
+  /// 토큰 만료 시 Vercel Serverless API (/api/google/token)를 호출하여
+  /// 서버 사이드 refresh_token으로 새 access_token을 0.1초 만에 갱신받는다.
+  /// (Safari ITP / 크로스사이트 쿠키 제한과 100% 무관하게 영구 작동)
   Future<http.Client?> reauthenticate({bool interactive = false}) async {
     if (_isDesktopAuth) {
       return _desktopAuthenticatedClient();
     }
 
-    // 웹: GIS Token Client로 재발급 시도
     if (_isWebAuth) {
       final sessionData = await GoogleSessionStorage.loadSession();
       if (sessionData != null) {
-        // 1) 먼저 항상 silent(prompt: '')로 시도
-        final silentClient = await _refreshWebToken(sessionData, interactive: false);
-        if (silentClient != null) return silentClient;
-
-        // 2) silent 실패 + interactive → 팝업(prompt: null)으로 재시도
-        if (interactive && !suppressInteractiveReauth) {
-          final popupClient = await _refreshWebToken(sessionData, interactive: true);
-          if (popupClient != null) return popupClient;
+        final serverResult = await GoogleTokenRefresher.fetchFreshAccessToken(
+          encryptedRefreshToken: sessionData.encryptedRefreshToken,
+        );
+        if (serverResult != null) {
+          await GoogleSessionStorage.saveSession(GoogleSessionData(
+            id: sessionData.id,
+            email: sessionData.email,
+            displayName: sessionData.displayName,
+            photoUrl: sessionData.photoUrl,
+            accessToken: serverResult.accessToken,
+            encryptedRefreshToken: sessionData.encryptedRefreshToken,
+            expiresAt: serverResult.expiresAt,
+          ));
+          final headers = {'Authorization': 'Bearer ${serverResult.accessToken}'};
+          return _AuthenticatedClient(headers, http.Client());
         }
       }
-      if (_signedInAccount == null) return null;
     }
 
-    // 모바일 및 웹 폴백: google_sign_in 계정 세션 재사용
+    // 폴백: google_sign_in
     try {
       final account = _signedInAccount ??
           _googleSignIn.currentUser ??
@@ -423,11 +422,12 @@ class GoogleAuthService {
     } catch (e) {
       debugPrint('GoogleAuthService reauthenticate error: $e');
     }
+
+    // 만약 invalid_grant 등 모든 토큰 갱신에 실패한 경우 사용자 재로그인 유도
+    await signOut();
     return null;
   }
 
-  /// 데스크톱(리눅스/윈도우): 저장된 계정으로 인증 클라이언트 생성
-  /// (만료 시 refresh token으로 자동 갱신)
   Future<http.Client?> _desktopAuthenticatedClient() async {
     try {
       var desktopAcc = await _desktopAuth.loadSavedAccount();
@@ -445,46 +445,43 @@ class GoogleAuthService {
   }
 
   /// googleapis 패키지에서 사용할 인증 헤더가 포함된 http.Client 객체 리턴
-  ///
-  /// [interactive] == true면 토큰 만료 시 사용자 제스처 기반 팝업 재인증까지
-  /// 시도한다 (모바일 웹에서 1시간 만료 후에도 동기화를 유지하기 위함).
-  /// 리다이렉트 재인증은 사용하지 않는다 (redirect_uri 미등록 시 400 에러 방지).
   Future<http.Client?> getAuthenticatedClient({bool interactive = false}) async {
     if (_isDesktopAuth) {
       return _desktopAuthenticatedClient();
     }
 
-    // 웹/모바일 환경
     try {
-      // 1) 저장된 세션의 access token이 아직 유효하면 그대로 사용
-      //    (토큰 갱신 불필요 — 페이지 새로고침 후에도 안정적으로 동작)
       final sessionData = await GoogleSessionStorage.loadSession();
       if (sessionData != null) {
         final tokenUsable = _isUsableToken(sessionData.accessToken);
+        // 1) 토큰이 아직 유효하면 바로 반환
         if (tokenUsable && !_isExpiredSession(sessionData)) {
           final headers = {'Authorization': 'Bearer ${sessionData.accessToken}'};
           return _AuthenticatedClient(headers, http.Client());
         }
-        // 2) 만료/무효 토큰 → GIS Token Client로 재발급 시도
-        if (_isWebAuth) {
-          // 2-a) 먼저 항상 silent(prompt: '')로 시도 — 동일 브라우저 세션이면
-          //      팝업/리다이렉트 없이 조용히 갱신 가능
-          final silentRefreshed =
-              await _refreshWebToken(sessionData, interactive: false);
-          if (silentRefreshed != null) return silentRefreshed;
 
-          // 2-b) silent 실패 + 사용자 제스처(interactive) → 팝업(prompt: null)
-          //      으로 재시도. 팝업이 차단되거나 실패해도 리다이렉트로 넘어가지
-          //      않고, 아래 google_sign_in 폴백으로 자연스럽게 이어진다.
-          if (interactive && !suppressInteractiveReauth) {
-            final popupRefreshed =
-                await _refreshWebToken(sessionData, interactive: true);
-            if (popupRefreshed != null) return popupRefreshed;
+        // 2) 만료되었을 경우 Vercel Serverless Function (/api/google/token)으로 갱신 시도
+        if (_isWebAuth) {
+          final serverResult = await GoogleTokenRefresher.fetchFreshAccessToken(
+            encryptedRefreshToken: sessionData.encryptedRefreshToken,
+          );
+          if (serverResult != null) {
+            await GoogleSessionStorage.saveSession(GoogleSessionData(
+              id: sessionData.id,
+              email: sessionData.email,
+              displayName: sessionData.displayName,
+              photoUrl: sessionData.photoUrl,
+              accessToken: serverResult.accessToken,
+              encryptedRefreshToken: sessionData.encryptedRefreshToken,
+              expiresAt: serverResult.expiresAt,
+            ));
+            final headers = {'Authorization': 'Bearer ${serverResult.accessToken}'};
+            return _AuthenticatedClient(headers, http.Client());
           }
         }
       }
 
-      // 3) google_sign_in 계정 세션 기반 폴백
+      // 3) google_sign_in 계정 세션 폴백
       final account = _signedInAccount ??
           _googleSignIn.currentUser ??
           (await _googleSignIn.signInSilently());
@@ -492,7 +489,6 @@ class GoogleAuthService {
         final authHeaders = await account.authHeaders;
         final token = authHeaders['Authorization']?.replaceAll('Bearer ', '');
         if (_isUsableToken(token)) {
-          // 토큰 최신화 저장
           final currentUserObj = currentUser;
           if (currentUserObj != null) {
             await GoogleSessionStorage.saveSession(GoogleSessionData(

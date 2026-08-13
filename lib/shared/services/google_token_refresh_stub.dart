@@ -1,6 +1,5 @@
 import 'package:flutter/foundation.dart';
 
-/// GIS(Google Identity Services) Token Client 재발급 결과
 class GoogleTokenRefreshResult {
   final String accessToken;
   final DateTime expiresAt;
@@ -8,27 +7,58 @@ class GoogleTokenRefreshResult {
   GoogleTokenRefreshResult({required this.accessToken, required this.expiresAt});
 }
 
-/// 웹 외 플랫폼용 토큰 갱신자 (미지원 — null 반환)
+class GoogleServerAuthResult {
+  final String accessToken;
+  final DateTime expiresAt;
+  final String? encryptedRefreshToken;
+  final Map<String, dynamic>? userMap;
+
+  GoogleServerAuthResult({
+    required this.accessToken,
+    required this.expiresAt,
+    this.encryptedRefreshToken,
+    this.userMap,
+  });
+}
+
 class GoogleTokenRefresher {
   static Future<GoogleTokenRefreshResult?> refreshAccessToken({
     required String clientId,
     required List<String> scopes,
     String? loginHint,
     bool interactive = false,
+  }) async => null;
+
+  /// 웹: GIS initCodeClient 팝업을 통해 authorization_code를 수신한다.
+  static Future<String?> requestAuthCode({
+    required String clientId,
+    required List<String> scopes,
   }) async {
-    debugPrint('GoogleTokenRefresher: Not supported on this platform.');
+    debugPrint('GoogleTokenRefresher.requestAuthCode: Not supported on this platform.');
     return null;
   }
 
-  /// 웹: 팝업 재인증이 불가능한 브라우저에서 페이지 전체를 구글 OAuth로
-  /// 리다이렉트한다. (그 외 플랫폼: 무동작)
+  /// Vercel Serverless Function `/api/google/connect`로 authorization_code를 전달하여
+  /// 세션 쿠키/암호화 토큰 및 초기 access_token을 받는다.
+  static Future<GoogleServerAuthResult?> exchangeAuthCode(String code) async {
+    debugPrint('GoogleTokenRefresher.exchangeAuthCode: Not supported on this platform.');
+    return null;
+  }
+
+  /// Vercel Serverless Function `/api/google/token`으로 서버 세션 쿠키(또는 암호화 토큰)를 검증하여
+  /// 새 access_token을 갱신받는다. (100% 서버-대-서버 OAuth Refresh Token 갱신)
+  static Future<GoogleServerAuthResult?> fetchFreshAccessToken({String? encryptedRefreshToken}) async {
+    debugPrint('GoogleTokenRefresher.fetchFreshAccessToken: Not supported on this platform.');
+    return null;
+  }
+
+  static Future<void> disconnectServerSession() async {}
+
   static Future<void> startRedirectAuth({
     required String clientId,
     required List<String> scopes,
     String? loginHint,
   }) async {}
 
-  /// 웹: 리다이렉트 복귀 시 URL fragment에서 access token을 회수한다.
-  /// (그 외 플랫폼: 항상 null)
-  static Future<GoogleTokenRefreshResult?> consumeRedirectResult() async => null;
+  static Future<dynamic> consumeRedirectResult() async => null;
 }

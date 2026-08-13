@@ -11,6 +11,7 @@ class GoogleSessionData {
   final String? photoUrl;
   final String accessToken;
   final String? refreshToken;
+  final String? encryptedRefreshToken;
   final DateTime? expiresAt;
 
   GoogleSessionData({
@@ -20,6 +21,7 @@ class GoogleSessionData {
     this.photoUrl,
     required this.accessToken,
     this.refreshToken,
+    this.encryptedRefreshToken,
     this.expiresAt,
   });
 
@@ -30,6 +32,7 @@ class GoogleSessionData {
         'photoUrl': photoUrl,
         'accessToken': accessToken,
         'refreshToken': refreshToken,
+        'encryptedRefreshToken': encryptedRefreshToken,
         'expiresAt': expiresAt?.millisecondsSinceEpoch,
       };
 
@@ -40,6 +43,7 @@ class GoogleSessionData {
         photoUrl: json['photoUrl'] as String?,
         accessToken: json['accessToken'] as String,
         refreshToken: json['refreshToken'] as String?,
+        encryptedRefreshToken: json['encryptedRefreshToken'] as String?,
         expiresAt: json['expiresAt'] != null
             ? DateTime.fromMillisecondsSinceEpoch(json['expiresAt'] as int)
             : null,
@@ -101,10 +105,7 @@ class GoogleSessionStorageImpl {
     }
   }
 
-  /// 웹 리다이렉트 재인증 중 보류 중인 동기화 의도를 저장한다. (웹 전용 — 다른
-  /// 플랫폼에서는 무동작)
   static Future<void> setPendingSync(bool pending) async {}
 
-  /// 보류 중인 동기화 의도가 있는지 조회한다. (웹 전용 — 다른 플랫폼에서는 false)
   static Future<bool> hasPendingSync() async => false;
 }
