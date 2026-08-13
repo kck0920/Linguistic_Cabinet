@@ -235,6 +235,7 @@ class GoogleAuthService {
   }
 
   /// 기존 로그인 세션 조용히 복원
+  /// 기존 로그인 세션 조용히 복원 (팝업/네트워크 로그인 요청 절대 금지)
   Future<GoogleAuthUser?> signInSilently() async {
     try {
       if (_isDesktopAuth) {
@@ -263,9 +264,10 @@ class GoogleAuthService {
         );
         _savedWebUser = user;
         _userController.add(user);
+        return user;
       }
 
-      // 웹 모바일/리다이렉트 복귀 시 authorization_code가 수신된 경우 자동 토큰 교환
+      // 웹 모바일/리다이렉트 복귀 시 authorization_code가 수신된 경우에만 자동 토큰 교환
       if (_isWebAuth) {
         final redirectCode = GoogleTokenRefresher.consumeRedirectCode();
         if (redirectCode != null && redirectCode.isNotEmpty) {
@@ -296,49 +298,10 @@ class GoogleAuthService {
         }
       }
 
-      try {
-        final account = await _googleSignIn.signInSilently();
-        if (account != null) {
-          _signedInAccount = account;
-          final user = GoogleAuthUser(
-            id: account.id,
-            email: account.email,
-            displayName: account.displayName,
-            photoUrl: account.photoUrl,
-          );
-          _savedWebUser = user;
-
-          String token = sessionData != null && _isUsableToken(sessionData.accessToken)
-              ? sessionData.accessToken
-              : '';
-          try {
-            final authHeaders = await account.authHeaders;
-            final candidate = authHeaders['Authorization']?.replaceAll('Bearer ', '');
-            if (_isUsableToken(candidate)) {
-              token = candidate!;
-            }
-          } catch (_) {}
-
-          await GoogleSessionStorage.saveSession(GoogleSessionData(
-            id: user.id,
-            email: user.email,
-            displayName: user.displayName,
-            photoUrl: user.photoUrl,
-            accessToken: token,
-            encryptedRefreshToken: sessionData?.encryptedRefreshToken,
-            expiresAt: DateTime.now().add(const Duration(hours: 1)),
-          ));
-          _userController.add(user);
-          return user;
-        }
-      } catch (e) {
-        debugPrint('Google Sign In Web Silent Error: $e');
-      }
-
-      return _savedWebUser ?? currentUser;
+      return null;
     } catch (e) {
       debugPrint('Google Silent Sign-In Error: $e');
-      return currentUser;
+      return null;
     }
   }
 
@@ -429,9 +392,7 @@ class GoogleAuthService {
 
     // 폴백: google_sign_in
     try {
-      final account = _signedInAccount ??
-          _googleSignIn.currentUser ??
-          (await _googleSignIn.signInSilently());
+      final account = _signedInAccount ?? _googleSignIn.currentUser;
       if (account != null) {
         final authHeaders = await account.authHeaders;
         final token = authHeaders['Authorization']?.replaceAll('Bearer ', '');
@@ -513,9 +474,7 @@ class GoogleAuthService {
       }
 
       // 3) google_sign_in 계정 세션 폴백
-      final account = _signedInAccount ??
-          _googleSignIn.currentUser ??
-          (await _googleSignIn.signInSilently());
+      final account = _signedInAccount ?? _googleSignIn.currentUser;
       if (account != null) {
         final authHeaders = await account.authHeaders;
         final token = authHeaders['Authorization']?.replaceAll('Bearer ', '');
