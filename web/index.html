@@ -46,40 +46,14 @@
         return;
       }
       try {
-        var isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-        var currentOrigin = window.location.origin + window.location.pathname;
-
-        if (isMobile) {
-          console.log("Mobile browser detected. Using ux_mode: redirect");
-          sessionStorage.setItem('voca_pending_auth', '1');
-          var redirectClient = google.accounts.oauth2.initCodeClient({
-            client_id: clientId,
-            scope: scopesStr,
-            ux_mode: 'redirect',
-            redirect_uri: currentOrigin,
-          });
-          redirectClient.requestCode();
-          return;
-        }
-
+        // ux_mode: 'popup'과 'postmessage' redirect_uri를 사용하여 구글 400 redirect_uri_mismatch 에러 100% 원천 차단
         var client = google.accounts.oauth2.initCodeClient({
           client_id: clientId,
           scope: scopesStr,
           ux_mode: 'popup',
           callback: function(response) {
             if (response.error) {
-              if (response.error === 'popup_failed_to_open' || response.error === 'popup_closed') {
-                console.warn("Popup blocked. Fallback to ux_mode: redirect");
-                sessionStorage.setItem('voca_pending_auth', '1');
-                var fallbackClient = google.accounts.oauth2.initCodeClient({
-                  client_id: clientId,
-                  scope: scopesStr,
-                  ux_mode: 'redirect',
-                  redirect_uri: currentOrigin,
-                });
-                fallbackClient.requestCode();
-                return;
-              }
+              console.warn("GIS response error:", response.error);
               callback(null, response.error);
             } else if (response.code) {
               callback(response.code, null);
@@ -89,17 +63,12 @@
           },
           error_callback: function(err) {
             console.warn("GIS error_callback:", err);
-            sessionStorage.setItem('voca_pending_auth', '1');
-            var fallbackClient = google.accounts.oauth2.initCodeClient({
-              client_id: clientId,
-              scope: scopesStr,
-              ux_mode: 'redirect',
-              redirect_uri: currentOrigin,
-            });
-            fallbackClient.requestCode();
+            var errMsg = err ? (err.message || JSON.stringify(err)) : "Unknown error";
+            callback(null, errMsg);
           }
         });
 
+        // 탭 제스처 컨텍스트에서 동기적으로 팝업 호출
         client.requestCode();
       } catch (e) {
         callback(null, e.toString());
@@ -107,18 +76,6 @@
     };
 
     window.consumeRedirectCode = function() {
-      try {
-        var urlParams = new URLSearchParams(window.location.search);
-        var code = urlParams.get('code');
-        if (code) {
-          var cleanUrl = window.location.origin + window.location.pathname + window.location.hash;
-          window.history.replaceState({}, document.title, cleanUrl);
-          sessionStorage.removeItem('voca_pending_auth');
-          return code;
-        }
-      } catch (e) {
-        console.error("Error consuming redirect code:", e);
-      }
       return null;
     };
   </script>

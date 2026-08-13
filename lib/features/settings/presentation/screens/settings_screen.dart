@@ -853,11 +853,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               } catch (e) {
                 if (mounted) {
                   final errStr = e.toString();
-                  final errMsg = (errStr.contains('appClientId != null') || errStr.contains('ClientId not set'))
-                      ? 'Google OAuth Client ID 설정이 필요합니다. (Google Cloud Console 발급 필요)'
-                      : 'Google 로그인 실패: $e';
+                  String errMsg = 'Google 로그인 실패: $e';
+                  if (errStr.contains('popup_failed_to_open') || errStr.contains('popup_closed')) {
+                    errMsg = '아이폰 Safari 팝업 차단으로 창이 열리지 않았습니다. iOS 설정 > Safari > [팝업 차단]을 해제 후 다시 눌러주세요.';
+                  } else if (errStr.contains('appClientId != null') || errStr.contains('ClientId not set')) {
+                    errMsg = 'Google OAuth Client ID 설정이 필요합니다. (Google Cloud Console 발급 필요)';
+                  }
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(errMsg)),
+                    SnackBar(
+                      content: Text(errMsg),
+                      duration: const Duration(seconds: 5),
+                    ),
                   );
                 }
               }
