@@ -46,13 +46,40 @@
         return;
       }
       try {
-        // ux_mode: 'popup'을 사용하여 'postmessage' redirect_uri로 통신 (redirect_uri_mismatch 400 에러 완전 차단)
+        var isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+        var currentOrigin = window.location.origin + window.location.pathname;
+
+        if (isMobile) {
+          console.log("Mobile browser detected. Using ux_mode: redirect");
+          sessionStorage.setItem('voca_pending_auth', '1');
+          var redirectClient = google.accounts.oauth2.initCodeClient({
+            client_id: clientId,
+            scope: scopesStr,
+            ux_mode: 'redirect',
+            redirect_uri: currentOrigin,
+          });
+          redirectClient.requestCode();
+          return;
+        }
+
         var client = google.accounts.oauth2.initCodeClient({
           client_id: clientId,
           scope: scopesStr,
           ux_mode: 'popup',
           callback: function(response) {
             if (response.error) {
+              if (response.error === 'popup_failed_to_open' || response.error === 'popup_closed') {
+                console.warn("Popup blocked. Fallback to ux_mode: redirect");
+                sessionStorage.setItem('voca_pending_auth', '1');
+                var fallbackClient = google.accounts.oauth2.initCodeClient({
+                  client_id: clientId,
+                  scope: scopesStr,
+                  ux_mode: 'redirect',
+                  redirect_uri: currentOrigin,
+                });
+                fallbackClient.requestCode();
+                return;
+              }
               callback(null, response.error);
             } else if (response.code) {
               callback(response.code, null);
@@ -62,12 +89,17 @@
           },
           error_callback: function(err) {
             console.warn("GIS error_callback:", err);
-            var errMsg = err ? (err.message || JSON.stringify(err)) : "Unknown error";
-            callback(null, errMsg);
+            sessionStorage.setItem('voca_pending_auth', '1');
+            var fallbackClient = google.accounts.oauth2.initCodeClient({
+              client_id: clientId,
+              scope: scopesStr,
+              ux_mode: 'redirect',
+              redirect_uri: currentOrigin,
+            });
+            fallbackClient.requestCode();
           }
         });
 
-        // 클릭 이벤트 핸들러 맥락에서 즉시 팝업 창 호출
         client.requestCode();
       } catch (e) {
         callback(null, e.toString());
@@ -75,6 +107,18 @@
     };
 
     window.consumeRedirectCode = function() {
+      try {
+        var urlParams = new URLSearchParams(window.location.search);
+        var code = urlParams.get('code');
+        if (code) {
+          var cleanUrl = window.location.origin + window.location.pathname + window.location.hash;
+          window.history.replaceState({}, document.title, cleanUrl);
+          sessionStorage.removeItem('voca_pending_auth');
+          return code;
+        }
+      } catch (e) {
+        console.error("Error consuming redirect code:", e);
+      }
       return null;
     };
   </script>
