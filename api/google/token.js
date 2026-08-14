@@ -1,5 +1,5 @@
-const { decrypt } = require('../_utils/crypto');
-const { parseCookies } = require('../_utils/cookie');
+const { encrypt, decrypt } = require('../_utils/crypto');
+const { parseCookies, serializeCookie } = require('../_utils/cookie');
 
 const CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '1002909356316-llhqdfguevm9je83uhtdqblgm5621ra1.apps.googleusercontent.com';
 const CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || '';
@@ -22,8 +22,8 @@ module.exports = async (req, res) => {
     const cookies = parseCookies(req);
     const { encrypted_refresh_token: bodyToken } = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {});
 
-    // 1차: HttpOnly Cookie, 2차: Request Body
-    const encryptedToken = cookies.voca_session || bodyToken;
+    // 1차: Request Body (PWA/iOS Safari ITP에 가장 안전), 2차: HttpOnly Cookie
+    const encryptedToken = bodyToken || cookies.voca_session;
 
     if (!encryptedToken) {
       return res.status(401).json({ error: 'unauthorized', error_description: 'No session cookie or token provided' });
@@ -57,11 +57,29 @@ module.exports = async (req, res) => {
       });
     }
 
-    const { access_token, expires_in } = tokenData;
+    const { access_token, refresh_token: newRawRefreshToken, expires_in } = tokenData;
+
+    let responseEncryptedToken = encryptedToken;
+    if (newRawRefreshToken) {
+      const newlyEncrypted = encrypt(newRawRefreshToken);
+      if (newlyEncrypted) {
+        responseEncryptedToken = newlyEncrypted;
+        const isProduction = process.env.NODE_ENV === 'production' || process.env.VERCEL === '1';
+        const cookieStr = serializeCookie('voca_session', newlyEncrypted, {
+          httpOnly: true,
+          secure: isProduction,
+          sameSite: 'Lax',
+          path: '/',
+          maxAge: 365 * 24 * 60 * 60, // 1년
+        });
+        res.setHeader('Set-Cookie', cookieStr);
+      }
+    }
 
     return res.status(200).json({
       access_token,
       expires_in: expires_in || 3600,
+      encrypted_refresh_token: responseEncryptedToken,
     });
   } catch (err) {
     console.error('API /token error:', err);

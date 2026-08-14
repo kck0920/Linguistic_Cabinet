@@ -152,6 +152,7 @@ class GoogleTokenRefresher {
 
       final accessToken = map['access_token'] as String?;
       final expiresIn = map['expires_in'] as int? ?? 3600;
+      final newEncryptedToken = map['encrypted_refresh_token'] as String?;
 
       if (accessToken == null || accessToken.isEmpty) {
         return null;
@@ -160,6 +161,7 @@ class GoogleTokenRefresher {
       return GoogleServerAuthResult(
         accessToken: accessToken,
         expiresAt: DateTime.now().add(Duration(seconds: expiresIn)),
+        encryptedRefreshToken: newEncryptedToken ?? encryptedRefreshToken,
       );
     } catch (e) {
       debugPrint('fetchFreshAccessToken exception: $e');

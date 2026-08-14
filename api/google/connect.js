@@ -1,5 +1,5 @@
 const { encrypt } = require('../_utils/crypto');
-const { serializeCookie } = require('../_utils/cookie');
+const { serializeCookie, parseCookies } = require('../_utils/cookie');
 
 const CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '1002909356316-llhqdfguevm9je83uhtdqblgm5621ra1.apps.googleusercontent.com';
 const CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || '';
@@ -19,7 +19,9 @@ module.exports = async (req, res) => {
   }
 
   try {
-    const { code, redirect_uri } = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {});
+    const cookies = parseCookies(req);
+    const body = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {});
+    const { code, redirect_uri, encrypted_refresh_token: existingEncryptedToken } = body;
     if (!code) {
       return res.status(400).json({ error: 'Authorization code is required' });
     }
@@ -63,8 +65,11 @@ module.exports = async (req, res) => {
       console.error('Failed to fetch user info:', userErr);
     }
 
-    // refresh_token이 수신되었는지 확인
-    const encryptedRefreshToken = encrypt(refresh_token);
+    // refresh_token이 수신되었는지 확인 (수신되지 않은 경우 기존에 저장된 토큰 유지)
+    let encryptedRefreshToken = encrypt(refresh_token);
+    if (!encryptedRefreshToken && (existingEncryptedToken || cookies.voca_session)) {
+      encryptedRefreshToken = existingEncryptedToken || cookies.voca_session;
+    }
 
     if (encryptedRefreshToken) {
       // 1년 유효 HttpOnly Cookie 심기 (SameSite=Lax, Secure)

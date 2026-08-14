@@ -264,6 +264,30 @@ class GoogleAuthService {
         );
         _savedWebUser = user;
         _userController.add(user);
+
+        // 만약 토큰이 만료되었거나 만료 임박(5분 전) 상태라면 백그라운드로 미리 갱신 시도 (사용자 로그인 상태는 유지)
+        if (_isWebAuth && _isExpiredSession(sessionData)) {
+          unawaited(
+            GoogleTokenRefresher.fetchFreshAccessToken(
+              encryptedRefreshToken: sessionData.encryptedRefreshToken,
+            ).then((serverResult) async {
+              if (serverResult != null) {
+                await GoogleSessionStorage.saveSession(GoogleSessionData(
+                  id: sessionData.id,
+                  email: sessionData.email,
+                  displayName: sessionData.displayName,
+                  photoUrl: sessionData.photoUrl,
+                  accessToken: serverResult.accessToken,
+                  encryptedRefreshToken: serverResult.encryptedRefreshToken ?? sessionData.encryptedRefreshToken,
+                  expiresAt: serverResult.expiresAt,
+                ));
+              }
+            }).catchError((e) {
+              debugPrint('Background silent token refresh error: $e');
+            }),
+          );
+        }
+
         return user;
       }
 
@@ -305,7 +329,7 @@ class GoogleAuthService {
     }
   }
 
-  /// 로그아웃
+  /// 로그아웃 (사용자가 명시적으로 '연결 해제' 버튼을 누른 경우에만 호출됨)
   Future<void> signOut() async {
     try {
       if (_isDesktopAuth) {
@@ -361,8 +385,8 @@ class GoogleAuthService {
   }
 
   /// 토큰 만료 시 Vercel Serverless API (/api/google/token)를 호출하여
-  /// 서버 사이드 refresh_token으로 새 access_token을 0.1초 만에 갱신받는다.
-  /// (Safari ITP / 크로스사이트 쿠키 제한과 100% 무관하게 영구 작동)
+  /// 서버 사이드 refresh_token으로 새 access_token을 갱신받는다.
+  /// (사용자가 '연결 해제'를 누르기 전까지는 갱신 실패 시에도 세션을 삭제하지 않음)
   Future<http.Client?> reauthenticate({bool interactive = false}) async {
     if (_isDesktopAuth) {
       return _desktopAuthenticatedClient();
@@ -381,7 +405,7 @@ class GoogleAuthService {
             displayName: sessionData.displayName,
             photoUrl: sessionData.photoUrl,
             accessToken: serverResult.accessToken,
-            encryptedRefreshToken: sessionData.encryptedRefreshToken,
+            encryptedRefreshToken: serverResult.encryptedRefreshToken ?? sessionData.encryptedRefreshToken,
             expiresAt: serverResult.expiresAt,
           ));
           final headers = {'Authorization': 'Bearer ${serverResult.accessToken}'};
@@ -415,8 +439,8 @@ class GoogleAuthService {
       debugPrint('GoogleAuthService reauthenticate error: $e');
     }
 
-    // 만약 invalid_grant 등 모든 토큰 갱신에 실패한 경우 사용자 재로그인 유도
-    await signOut();
+    // 토큰 갱신에 실패하더라도 사용자가 '연결 해제'를 누르기 전까지는 세션을 절대 파기하지 않는다.
+    debugPrint('GoogleAuthService reauthenticate: Token refresh failed, preserving user session.');
     return null;
   }
 
@@ -464,7 +488,7 @@ class GoogleAuthService {
               displayName: sessionData.displayName,
               photoUrl: sessionData.photoUrl,
               accessToken: serverResult.accessToken,
-              encryptedRefreshToken: sessionData.encryptedRefreshToken,
+              encryptedRefreshToken: serverResult.encryptedRefreshToken ?? sessionData.encryptedRefreshToken,
               expiresAt: serverResult.expiresAt,
             ));
             final headers = {'Authorization': 'Bearer ${serverResult.accessToken}'};

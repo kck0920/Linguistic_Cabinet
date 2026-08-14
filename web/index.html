@@ -46,11 +46,13 @@
         return;
       }
       try {
-        // ux_mode: 'popup'과 'postmessage' redirect_uri를 사용하여 구글 400 redirect_uri_mismatch 에러 100% 원천 차단
+        // ux_mode: 'popup'과 'postmessage' redirect_uri를 사용하고
+        // prompt: 'consent'를 명시하여 재인증 시에도 항상 refresh_token이 발급되도록 보장
         var client = google.accounts.oauth2.initCodeClient({
           client_id: clientId,
           scope: scopesStr,
           ux_mode: 'popup',
+          prompt: 'consent',
           callback: function(response) {
             if (response.error) {
               console.warn("GIS response error:", response.error);
