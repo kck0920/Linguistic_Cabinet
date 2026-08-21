@@ -35,7 +35,7 @@ class GoogleDriveService {
     Future<T?> Function(drive.DriveApi api) action, {
     bool interactive = false,
   }) async {
-    var client = await _authService.getAuthenticatedClient(interactive: false);
+    var client = await _authService.getAuthenticatedClient(interactive: interactive);
     if (client == null) {
       debugPrint('GoogleDriveService: No authenticated client.');
       return null;
@@ -45,7 +45,7 @@ class GoogleDriveService {
     } on drive.DetailedApiRequestError catch (e) {
       if (e.status == 401) {
         debugPrint('GoogleDriveService: Auth error (401), re-authenticating...');
-        final newClient = await _authService.reauthenticate(interactive: false);
+        final newClient = await _authService.reauthenticate(interactive: interactive);
         if (newClient != null) {
           try {
             return await action(drive.DriveApi(newClient));
@@ -97,11 +97,18 @@ class GoogleDriveService {
   }
 
   /// 구글 드라이브에서 `vocatree.db` 파일 바이트 다운로드
-  Future<List<int>?> downloadDatabase({bool interactive = false}) async {
+  ///
+  /// [knownMetadata]를 전달하면 내부 메타데이터 조회를 생략한다
+  /// (동기화 흐름에서 이미 조회한 결과 재사용 — Drive 호출/재인증 중복 방지).
+  Future<List<int>?> downloadDatabase({
+    bool interactive = false,
+    DriveFileMetadata? knownMetadata,
+  }) async {
     try {
       return await _withAuthRetry<List<int>>(
         (driveApi) async {
-        final metadata = await getRemoteDatabaseMetadata(interactive: interactive);
+        final metadata =
+            knownMetadata ?? await getRemoteDatabaseMetadata(interactive: interactive);
         if (metadata == null) return null;
 
         final dynamic response = await driveApi.files.get(
@@ -127,11 +134,19 @@ class GoogleDriveService {
   }
 
   /// 구글 드라이브로 `vocatree.db` 파일 바이너리 업로드
-  Future<DriveFileMetadata?> uploadDatabase(List<int> bytes, {bool interactive = false}) async {
+  ///
+  /// [knownMetadata]를 전달하면 내부 메타데이터 조회를 생략한다
+  /// (동기화 흐름에서 이미 조회한 결과 재사용 — Drive 호출/재인증 중복 방지).
+  Future<DriveFileMetadata?> uploadDatabase(
+    List<int> bytes, {
+    bool interactive = false,
+    DriveFileMetadata? knownMetadata,
+  }) async {
     try {
       return await _withAuthRetry<DriveFileMetadata>(
         (driveApi) async {
-        final existingFile = await getRemoteDatabaseMetadata(interactive: interactive);
+        final existingFile =
+            knownMetadata ?? await getRemoteDatabaseMetadata(interactive: interactive);
         final mediaStream = Stream.value(bytes);
         final media = drive.Media(mediaStream, bytes.length);
 

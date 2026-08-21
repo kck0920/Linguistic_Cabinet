@@ -39,20 +39,18 @@
   <meta name="google-signin-client_id" content="1002909356316-llhqdfguevm9je83uhtdqblgm5621ra1.apps.googleusercontent.com">
   <script src="https://accounts.google.com/gsi/client" async defer></script>
   <script>
-    window.requestGoogleAuthCode = function(clientId, scopesStr, callback) {
+    window.requestGoogleAuthCode = function(clientId, scopesStr, promptMode, callback) {
       if (!window.google || !window.google.accounts || !window.google.accounts.oauth2) {
         console.error("GIS not loaded yet");
         callback(null, "GIS SDK not loaded");
         return;
       }
       try {
-        // ux_mode: 'popup'과 'postmessage' redirect_uri를 사용하고
-        // prompt: 'consent'를 명시하여 재인증 시에도 항상 refresh_token이 발급되도록 보장
         var client = google.accounts.oauth2.initCodeClient({
           client_id: clientId,
           scope: scopesStr,
           ux_mode: 'popup',
-          prompt: 'consent',
+          prompt: promptMode || 'consent',
           callback: function(response) {
             if (response.error) {
               console.warn("GIS response error:", response.error);

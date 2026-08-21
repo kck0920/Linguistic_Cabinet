@@ -21,6 +21,26 @@ class GoogleServerAuthResult {
   });
 }
 
+/// GIS authorization_code 요청 결과.
+///
+/// [error]는 사용자가 팝업을 직접 닫거나 거부한 경우(취소)와 기술적 실패를
+/// 구분할 때 사용한다. [userCancelled] == true이면 추가 폴백 프롬프트 없이
+/// 로그인 시도를 조용히 종료하는 것이 UX상 올바르다.
+class GoogleAuthCodeRequest {
+  final String? code;
+  final String? error;
+
+  const GoogleAuthCodeRequest({this.code, this.error});
+
+  bool get userCancelled {
+    final e = (error ?? '').toLowerCase();
+    return e.contains('popup_closed') ||
+        e.contains('popup_failed_to_open') ||
+        e.contains('access_denied') ||
+        e.contains('dismissed');
+  }
+}
+
 class GoogleTokenRefresher {
   static Future<GoogleTokenRefreshResult?> refreshAccessToken({
     required String clientId,
@@ -32,12 +52,16 @@ class GoogleTokenRefresher {
   static String? consumeRedirectCode() => null;
 
   /// 웹: GIS initCodeClient 팝업을 통해 authorization_code를 수신한다.
-  static Future<String?> requestAuthCode({
+  ///
+  /// [prompt]: 'consent'(기본 — refresh_token 발급 보장) 또는
+  /// 'select_account'(기존 refresh_token이 살아있는 재로그인 시 동의 화면 생략).
+  static Future<GoogleAuthCodeRequest> requestAuthCode({
     required String clientId,
     required List<String> scopes,
+    String prompt = 'consent',
   }) async {
     debugPrint('GoogleTokenRefresher.requestAuthCode: Not supported on this platform.');
-    return null;
+    return GoogleAuthCodeRequest(error: 'unsupported_platform');
   }
 
   /// Vercel Serverless Function `/api/google/connect`로 authorization_code를 전달하여

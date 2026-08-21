@@ -160,12 +160,26 @@ class GoogleAuthService {
 
       // 웹 환경:
       if (_isWebAuth) {
+        // 기존 세션에 유효한 refresh token이 있으면 select_account로 동의 화면 생략, 없으면 consent로 refresh token 발급 유도
+        final existingSession = await GoogleSessionStorage.loadSession();
+        final hasRefreshToken = existingSession?.encryptedRefreshToken != null &&
+            existingSession!.encryptedRefreshToken!.isNotEmpty;
+        final promptMode = hasRefreshToken ? 'select_account' : 'consent';
+
         // 1. Auth Code Flow + Serverless 시도
-        final code = await GoogleTokenRefresher.requestAuthCode(
+        final codeReq = await GoogleTokenRefresher.requestAuthCode(
           clientId: customClientId ?? '',
           scopes: _scopes,
+          prompt: promptMode,
         );
 
+        // 사용자가 팝업을 직접 닫거나 취소한 경우: 추가 프롬프트 없이 즉시 종료
+        if (codeReq.userCancelled) {
+          debugPrint('Google Sign-In cancelled by user.');
+          return null;
+        }
+
+        final code = codeReq.code;
         if (code != null && code.isNotEmpty) {
           final serverResult = await GoogleTokenRefresher.exchangeAuthCode(code);
           if (serverResult != null) {
@@ -184,7 +198,7 @@ class GoogleAuthService {
               displayName: user.displayName,
               photoUrl: user.photoUrl,
               accessToken: serverResult.accessToken,
-              encryptedRefreshToken: serverResult.encryptedRefreshToken,
+              encryptedRefreshToken: serverResult.encryptedRefreshToken ?? existingSession?.encryptedRefreshToken,
               expiresAt: serverResult.expiresAt,
             ));
 
@@ -193,35 +207,40 @@ class GoogleAuthService {
           }
         }
 
-        // 2. 만약 Serverless 교환이 실패했더라도 GIS Token Client로 직접 로그인
-        final tokenResult = await GoogleTokenRefresher.requestAccessToken(
-          clientId: customClientId ?? '',
-          scopes: _scopes,
-          prompt: 'select_account',
-        );
-
-        if (tokenResult != null && tokenResult.accessToken.isNotEmpty) {
-          final userInfo = await GoogleTokenRefresher.fetchUserInfo(tokenResult.accessToken);
-          final user = GoogleAuthUser(
-            id: userInfo?['id'] as String? ?? 'user_${DateTime.now().millisecondsSinceEpoch}',
-            email: userInfo?['email'] as String? ?? 'google_user@gmail.com',
-            displayName: userInfo?['name'] as String?,
-            photoUrl: userInfo?['picture'] as String?,
+        // 사용자가 취소한 것이 아니라 서버리스 exchangeAuthCode가 기술적으로 실패한 경우에만 GIS Token Client 폴백 시도
+        if (code != null && code.isNotEmpty) {
+          final tokenResult = await GoogleTokenRefresher.requestAccessToken(
+            clientId: customClientId ?? '',
+            scopes: _scopes,
+            prompt: 'select_account',
           );
-          _savedWebUser = user;
 
-          await GoogleSessionStorage.saveSession(GoogleSessionData(
-            id: user.id,
-            email: user.email,
-            displayName: user.displayName,
-            photoUrl: user.photoUrl,
-            accessToken: tokenResult.accessToken,
-            expiresAt: tokenResult.expiresAt,
-          ));
+          if (tokenResult != null && tokenResult.accessToken.isNotEmpty) {
+            final userInfo = await GoogleTokenRefresher.fetchUserInfo(tokenResult.accessToken);
+            final user = GoogleAuthUser(
+              id: userInfo?['id'] as String? ?? 'user_${DateTime.now().millisecondsSinceEpoch}',
+              email: userInfo?['email'] as String? ?? 'google_user@gmail.com',
+              displayName: userInfo?['name'] as String?,
+              photoUrl: userInfo?['picture'] as String?,
+            );
+            _savedWebUser = user;
 
-          _userController.add(user);
-          return user;
+            await GoogleSessionStorage.saveSession(GoogleSessionData(
+              id: user.id,
+              email: user.email,
+              displayName: user.displayName,
+              photoUrl: user.photoUrl,
+              accessToken: tokenResult.accessToken,
+              encryptedRefreshToken: existingSession?.encryptedRefreshToken,
+              expiresAt: tokenResult.expiresAt,
+            ));
+
+            _userController.add(user);
+            return user;
+          }
         }
+
+        return null;
       }
 
       // 모바일 / 웹 폴백: google_sign_in
@@ -402,11 +421,31 @@ class GoogleAuthService {
     }
   }
 
-  /// Web 토큰 갱신:
+  Future<String?>? _inFlightWebRefresh;
+
+  /// Web 토큰 갱신 (In-flight 락으로 동시 다중 호출 시 중복 팝업 및 중복 갱신 원천 차단):
   /// 1. Vercel Serverless Function (/api/google/token)으로 refresh_token 기반 갱신
   /// 2. 실패 시 브라우저 GIS Token Client (prompt: '') 로 백그라운드 무팝업 사일런트 갱신
   /// 3. [interactive] == true 이면 GIS Token Client (prompt: 'select_account') 로 팝업 재인증 갱신
   Future<String?> _refreshWebAccessToken({
+    required GoogleSessionData sessionData,
+    bool interactive = false,
+  }) {
+    final inFlight = _inFlightWebRefresh;
+    if (inFlight != null) {
+      debugPrint('_refreshWebAccessToken: Reusing in-flight refresh task.');
+      return inFlight;
+    }
+    final future = _doRefreshWebAccessToken(
+      sessionData: sessionData,
+      interactive: interactive,
+    );
+    _inFlightWebRefresh = future;
+    future.whenComplete(() => _inFlightWebRefresh = null);
+    return future;
+  }
+
+  Future<String?> _doRefreshWebAccessToken({
     required GoogleSessionData sessionData,
     bool interactive = false,
   }) async {

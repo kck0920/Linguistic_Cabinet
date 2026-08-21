@@ -190,8 +190,8 @@ class GoogleDriveSyncService {
       if (remoteMetadata == null) {
         // 원격 DB가 없으면 로컬 DB 업로드
         debugPrint('GoogleDriveSyncService: Remote DB not found. Uploading local DB...');
-        final uploaded =
-            await _driveService.uploadDatabase(localBytes, interactive: interactive);
+        final uploaded = await _driveService.uploadDatabase(
+            localBytes, interactive: interactive, knownMetadata: remoteMetadata);
         if (uploaded != null) {
           await _setLastSyncTime(uploaded.modifiedTime);
           _setState(SyncState(
@@ -210,8 +210,8 @@ class GoogleDriveSyncService {
         // 원격이 최신이고 로컬에 미동기화 변경이 없을 때만 다운로드하여 교체
         if (remoteIsNewer && !hasUnsyncedLocalChanges) {
           debugPrint('GoogleDriveSyncService: Remote DB is newer. Downloading remote DB...');
-          final downloadedBytes =
-              await _driveService.downloadDatabase(interactive: interactive);
+          final downloadedBytes = await _driveService.downloadDatabase(
+              interactive: interactive, knownMetadata: remoteMetadata);
           if (downloadedBytes != null && downloadedBytes.isNotEmpty) {
             final imported = await DatabaseService.importDatabaseBytes(downloadedBytes);
             if (imported) {
@@ -232,8 +232,8 @@ class GoogleDriveSyncService {
             debugPrint('GoogleDriveSyncService: Local DB is newer/current. Uploading to Drive...');
           }
           // 로컬 데이터가 최신이거나 동일하면 업로드
-          final uploaded =
-              await _driveService.uploadDatabase(localBytes, interactive: interactive);
+          final uploaded = await _driveService.uploadDatabase(
+              localBytes, interactive: interactive, knownMetadata: remoteMetadata);
           if (uploaded != null) {
             await _setLastSyncTime(uploaded.modifiedTime);
             _setState(SyncState(

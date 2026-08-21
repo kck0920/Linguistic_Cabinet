@@ -9,6 +9,7 @@ import 'google_token_refresh_stub.dart';
 external void _requestGoogleAuthCode(
   JSString clientId,
   JSString scopesStr,
+  JSString promptMode,
   JSFunction callback,
 );
 
@@ -38,23 +39,27 @@ class GoogleTokenRefresher {
   }
 
   /// 웹: GIS initCodeClient 팝업/리다이렉트를 통해 authorization_code를 수신한다.
-  static Future<String?> requestAuthCode({
+  ///
+  /// [prompt]: 'consent'(기본 — refresh_token 발급 보장) 또는
+  /// 'select_account'(기존 refresh_token이 살아있는 재로그인 시 동의 화면 생략).
+  static Future<GoogleAuthCodeRequest> requestAuthCode({
     required String clientId,
     required List<String> scopes,
+    String prompt = 'consent',
   }) async {
     try {
-      final completer = Completer<String?>();
+      final completer = Completer<GoogleAuthCodeRequest>();
       final scopesStr = scopes.join(' ');
 
       final jsCallback = (JSString? code, JSString? err) {
         if (!completer.isCompleted) {
           if (err != null && err.toDart.isNotEmpty) {
             debugPrint('requestAuthCode error: ${err.toDart}');
-            completer.complete(null);
+            completer.complete(GoogleAuthCodeRequest(error: err.toDart));
           } else if (code != null && code.toDart.isNotEmpty) {
-            completer.complete(code.toDart);
+            completer.complete(GoogleAuthCodeRequest(code: code.toDart));
           } else {
-            completer.complete(null);
+            completer.complete(const GoogleAuthCodeRequest());
           }
         }
       }.toJS;
@@ -62,6 +67,7 @@ class GoogleTokenRefresher {
       _requestGoogleAuthCode(
         clientId.toJS,
         scopesStr.toJS,
+        prompt.toJS,
         jsCallback,
       );
 
@@ -69,12 +75,12 @@ class GoogleTokenRefresher {
         const Duration(seconds: 60),
         onTimeout: () {
           debugPrint('requestAuthCode timed out.');
-          return null;
+          return const GoogleAuthCodeRequest();
         },
       );
     } catch (e) {
       debugPrint('requestAuthCode exception: $e');
-      return null;
+      return GoogleAuthCodeRequest(error: e.toString());
     }
   }
 
