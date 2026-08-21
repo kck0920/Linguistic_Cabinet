@@ -4,8 +4,19 @@ const { parseCookies, serializeCookie } = require('../_utils/cookie');
 const CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '1002909356316-llhqdfguevm9je83uhtdqblgm5621ra1.apps.googleusercontent.com';
 const CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || '';
 
+// ALLOWED_ORIGINS 환경변수(쉼표 구분)가 설정되면 해당 origin만 허용하고,
+// 없으면 기존처럼 요청 origin을 반사한다 (credentials 사용을 위해 '*' 대신 반사).
+const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || '')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
+
 module.exports = async (req, res) => {
-  res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
+  const origin = req.headers.origin || '';
+  if (ALLOWED_ORIGINS.length > 0 && origin && !ALLOWED_ORIGINS.includes(origin)) {
+    return res.status(403).json({ error: 'forbidden', error_description: 'Origin not allowed' });
+  }
+  res.setHeader('Access-Control-Allow-Origin', origin || '*');
   res.setHeader('Access-Control-Allow-Credentials', 'true');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');

@@ -47,11 +47,24 @@ class GoogleDriveSyncService {
   GoogleDriveSyncService._internal();
 
   static const String _prefLastSyncKey = 'gdrive_last_sync_timestamp';
+  static const String _prefLocalModifiedKey = 'gdrive_local_modified_at';
 
   final GoogleAuthService _authService = GoogleAuthService();
   final GoogleDriveService _driveService = GoogleDriveService();
 
   Timer? _debounceTimer;
+  Timer? _retryTimer;
+
+  final _stateController = StreamController<SyncState>.broadcast();
+  Stream<SyncState> get onStateChanged => _stateController.stream;
+
+  SyncState _state = SyncState(status: SyncStatus.idle);
+  SyncState get state => _state;
+
+  void _setState(SyncState next) {
+    _state = next;
+    _stateController.add(next);
+  }
 
   /// 진행 중인 동기화 작업 (중복 실행 방지용)
   Future<bool>? _inFlightSync;
@@ -97,6 +110,41 @@ class GoogleDriveSyncService {
     }
   }
 
+  /// 로컬 DB에 아직 Drive에 반영되지 않은 변경이 발생한 시각.
+  /// 마지막 동기화 시각보다 최신이면 '미동기화 로컬 변경'이 있는 상태다.
+  Future<DateTime?> _getLocalModifiedAt() async {
+    try {
+      final db = await DatabaseService.database;
+      final maps = await db.query(
+        'settings',
+        where: 'key = ?',
+        whereArgs: [_prefLocalModifiedKey],
+      );
+      final val = maps.isNotEmpty ? maps.first['value'] as String? : null;
+      final millis = val == null ? null : int.tryParse(val);
+      return millis == null ? null : DateTime.fromMillisecondsSinceEpoch(millis);
+    } catch (e) {
+      debugPrint('GoogleDriveSyncService _getLocalModifiedAt Error: $e');
+      return null;
+    }
+  }
+
+  Future<void> _setLocalModifiedAt(DateTime time) async {
+    try {
+      final db = await DatabaseService.database;
+      await db.insert(
+        'settings',
+        {
+          'key': _prefLocalModifiedKey,
+          'value': time.millisecondsSinceEpoch.toString(),
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    } catch (e) {
+      debugPrint('GoogleDriveSyncService _setLocalModifiedAt Error: $e');
+    }
+  }
+
   /// 동기화 실행 (수동/자동 공통)
   ///
   /// [interactive] == true면(수동 '지금 동기화' 버튼) 토큰 만료 시 사용자 제스처
@@ -121,16 +169,23 @@ class GoogleDriveSyncService {
       return false;
     }
 
+    _setState(SyncState(status: SyncStatus.syncing, userEmail: currentUser.email));
     try {
       final remoteMetadata =
           await _driveService.getRemoteDatabaseMetadata(interactive: interactive);
       final lastSyncTime = await _getLastSyncTime() ?? DateTime.fromMillisecondsSinceEpoch(0);
+      final localModifiedAt = await _getLocalModifiedAt();
 
       final localBytes = await DatabaseService.exportDatabaseBytes();
       if (localBytes == null || localBytes.isEmpty) {
         debugPrint('GoogleDriveSyncService: Local DB bytes empty.');
         return false;
       }
+
+      // 마지막 동기화 이후 로컬 변경이 아직 Drive에 반영되지 않은 상태면
+      // 로컬 변경 우선(업로드)으로 처리해 원격 다운로드로 인한 덮어쓰기 유실을 방지한다.
+      final hasUnsyncedLocalChanges = localModifiedAt != null &&
+          localModifiedAt.isAfter(lastSyncTime.add(const Duration(seconds: 2)));
 
       if (remoteMetadata == null) {
         // 원격 DB가 없으면 로컬 DB 업로드
@@ -139,14 +194,21 @@ class GoogleDriveSyncService {
             await _driveService.uploadDatabase(localBytes, interactive: interactive);
         if (uploaded != null) {
           await _setLastSyncTime(uploaded.modifiedTime);
+          _setState(SyncState(
+            status: SyncStatus.success,
+            userEmail: currentUser.email,
+            lastSyncTime: uploaded.modifiedTime,
+          ));
           return true;
         }
       } else {
         // 원격 DB와 로컬 동기화 시각 비교
         final remoteModifiedTime = remoteMetadata.modifiedTime;
-        
-        // 원격이 로컬 동기화 시점보다 2초 이상 최신이면 다운로드하여 교체
-        if (remoteModifiedTime.isAfter(lastSyncTime.add(const Duration(seconds: 2)))) {
+        final remoteIsNewer = remoteModifiedTime
+            .isAfter(lastSyncTime.add(const Duration(seconds: 2)));
+
+        // 원격이 최신이고 로컬에 미동기화 변경이 없을 때만 다운로드하여 교체
+        if (remoteIsNewer && !hasUnsyncedLocalChanges) {
           debugPrint('GoogleDriveSyncService: Remote DB is newer. Downloading remote DB...');
           final downloadedBytes =
               await _driveService.downloadDatabase(interactive: interactive);
@@ -154,30 +216,69 @@ class GoogleDriveSyncService {
             final imported = await DatabaseService.importDatabaseBytes(downloadedBytes);
             if (imported) {
               await _setLastSyncTime(remoteModifiedTime);
+              _setState(SyncState(
+                status: SyncStatus.success,
+                userEmail: currentUser.email,
+                lastSyncTime: remoteModifiedTime,
+              ));
               return true;
             }
           }
         } else {
+          if (remoteIsNewer && hasUnsyncedLocalChanges) {
+            debugPrint(
+                'GoogleDriveSyncService: Remote is newer but local has unsynced changes. Uploading local (local-wins) to avoid data loss...');
+          } else {
+            debugPrint('GoogleDriveSyncService: Local DB is newer/current. Uploading to Drive...');
+          }
           // 로컬 데이터가 최신이거나 동일하면 업로드
-          debugPrint('GoogleDriveSyncService: Local DB is newer/current. Uploading to Drive...');
           final uploaded =
               await _driveService.uploadDatabase(localBytes, interactive: interactive);
           if (uploaded != null) {
             await _setLastSyncTime(uploaded.modifiedTime);
+            _setState(SyncState(
+              status: SyncStatus.success,
+              userEmail: currentUser.email,
+              lastSyncTime: uploaded.modifiedTime,
+            ));
             return true;
           }
         }
       }
+      _setState(SyncState(
+        status: SyncStatus.error,
+        userEmail: currentUser.email,
+        errorMessage: '동기화가 완료되지 않았습니다.',
+      ));
+      _scheduleRetry();
       return false;
     } catch (e) {
       debugPrint('GoogleDriveSyncService sync error: $e');
+      _setState(SyncState(
+        status: SyncStatus.error,
+        userEmail: currentUser.email,
+        errorMessage: e.toString(),
+      ));
+      _scheduleRetry();
       return false;
     }
   }
 
+  /// 동기화 실패 후 30초 뒤 백그라운드 재시도 (중복 예약 방지)
+  void _scheduleRetry() {
+    if (_retryTimer?.isActive ?? false) return;
+    _retryTimer = Timer(const Duration(seconds: 30), () async {
+      await sync(interactive: false);
+    });
+  }
+
   /// 데이터 변경 후 3.5초 뒤 자동 백그라운드 동기화 스케줄링
   void scheduleDebouncedSync() {
+    // 변경 시점을 기록해, 업로드 실패 후 다른 기기의 원격 데이터로
+    // 로컬 변경이 덮어써지는 것을 방지한다.
+    unawaited(_setLocalModifiedAt(DateTime.now()));
     _debounceTimer?.cancel();
+    _retryTimer?.cancel();
     _debounceTimer = Timer(const Duration(milliseconds: 3500), () async {
       debugPrint('GoogleDriveSyncService: Executing debounced sync...');
       // 타이머 기반 자동 동기화는 사용자 제스처가 아니므로 팝업 재인증을 허용하지 않는다.

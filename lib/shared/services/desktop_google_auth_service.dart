@@ -175,6 +175,12 @@ class DesktopGoogleAuthService {
   }
 
   Future<DesktopGoogleAccount?> signIn() async {
+    if (!OAuthCredentials.hasClientSecret) {
+      throw Exception(
+        'OAUTH_CLIENT_SECRET이 설정되지 않았습니다. '
+        '--dart-define=OAUTH_CLIENT_SECRET=... 로 빌드 시 주입해 주세요.',
+      );
+    }
     HttpServer? server;
     try {
       // 1. 고정 선호 포트 시도 (8080, 8081, 8888 등)
