@@ -54,6 +54,14 @@ class GoogleTokenRefresher {
     return null;
   }
 
+  static Future<GoogleTokenRefreshResult?> requestAccessToken({
+    required String clientId,
+    required List<String> scopes,
+    String prompt = '',
+  }) async => null;
+
+  static Future<Map<String, dynamic>?> fetchUserInfo(String accessToken) async => null;
+
   static Future<void> disconnectServerSession() async {}
 
   static Future<void> startRedirectAuth({

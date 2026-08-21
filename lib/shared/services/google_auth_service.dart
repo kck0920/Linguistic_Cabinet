@@ -140,7 +140,7 @@ class GoogleAuthService {
     );
   }
 
-  /// 구글 로그인 시도 (Authorization Code Flow + Vercel Serverless Function)
+  /// 구글 로그인 시도 (Authorization Code Flow 및 GIS Token Client 2중 지원)
   Future<GoogleAuthUser?> signIn() async {
     try {
       if (_isDesktopAuth) {
@@ -158,8 +158,9 @@ class GoogleAuthService {
         return null;
       }
 
-      // 웹 환경: Authorization Code Flow (Serverless Token Exchange & Refresh Token 보관)
+      // 웹 환경:
       if (_isWebAuth) {
+        // 1. Auth Code Flow + Serverless 시도
         final code = await GoogleTokenRefresher.requestAuthCode(
           clientId: customClientId ?? '',
           scopes: _scopes,
@@ -190,6 +191,36 @@ class GoogleAuthService {
             _userController.add(user);
             return user;
           }
+        }
+
+        // 2. 만약 Serverless 교환이 실패했더라도 GIS Token Client로 직접 로그인
+        final tokenResult = await GoogleTokenRefresher.requestAccessToken(
+          clientId: customClientId ?? '',
+          scopes: _scopes,
+          prompt: 'select_account',
+        );
+
+        if (tokenResult != null && tokenResult.accessToken.isNotEmpty) {
+          final userInfo = await GoogleTokenRefresher.fetchUserInfo(tokenResult.accessToken);
+          final user = GoogleAuthUser(
+            id: userInfo?['id'] as String? ?? 'user_${DateTime.now().millisecondsSinceEpoch}',
+            email: userInfo?['email'] as String? ?? 'google_user@gmail.com',
+            displayName: userInfo?['name'] as String?,
+            photoUrl: userInfo?['picture'] as String?,
+          );
+          _savedWebUser = user;
+
+          await GoogleSessionStorage.saveSession(GoogleSessionData(
+            id: user.id,
+            email: user.email,
+            displayName: user.displayName,
+            photoUrl: user.photoUrl,
+            accessToken: tokenResult.accessToken,
+            expiresAt: tokenResult.expiresAt,
+          ));
+
+          _userController.add(user);
+          return user;
         }
       }
 
@@ -234,7 +265,6 @@ class GoogleAuthService {
     }
   }
 
-  /// 기존 로그인 세션 조용히 복원
   /// 기존 로그인 세션 조용히 복원 (팝업/네트워크 로그인 요청 절대 금지)
   Future<GoogleAuthUser?> signInSilently() async {
     try {
@@ -253,7 +283,7 @@ class GoogleAuthService {
         return null;
       }
 
-      // 세션 저장소에서 저장된 유저 정보 복원
+      // 세션 저장소(Dual Storage: localStorage + SQLite)에서 저장된 유저 정보 복원
       final sessionData = await GoogleSessionStorage.loadSession();
       if (sessionData != null) {
         final user = GoogleAuthUser(
@@ -265,25 +295,13 @@ class GoogleAuthService {
         _savedWebUser = user;
         _userController.add(user);
 
-        // 만약 토큰이 만료되었거나 만료 임박(5분 전) 상태라면 백그라운드로 미리 갱신 시도 (사용자 로그인 상태는 유지)
+        // 만약 토큰이 만료되었거나 만료 임박(5분 전) 상태라면 백그라운드로 미리 갱신 시도 (사용자 로그인 상태는 무조건 유지)
         if (_isWebAuth && _isExpiredSession(sessionData)) {
           unawaited(
-            GoogleTokenRefresher.fetchFreshAccessToken(
-              encryptedRefreshToken: sessionData.encryptedRefreshToken,
-            ).then((serverResult) async {
-              if (serverResult != null) {
-                await GoogleSessionStorage.saveSession(GoogleSessionData(
-                  id: sessionData.id,
-                  email: sessionData.email,
-                  displayName: sessionData.displayName,
-                  photoUrl: sessionData.photoUrl,
-                  accessToken: serverResult.accessToken,
-                  encryptedRefreshToken: serverResult.encryptedRefreshToken ?? sessionData.encryptedRefreshToken,
-                  expiresAt: serverResult.expiresAt,
-                ));
-              }
-            }).catchError((e) {
+            _refreshWebAccessToken(sessionData: sessionData, interactive: false)
+                .catchError((e) {
               debugPrint('Background silent token refresh error: $e');
+              return null;
             }),
           );
         }
@@ -384,21 +402,21 @@ class GoogleAuthService {
     }
   }
 
-  /// 토큰 만료 시 Vercel Serverless API (/api/google/token)를 호출하여
-  /// 서버 사이드 refresh_token으로 새 access_token을 갱신받는다.
-  /// (사용자가 '연결 해제'를 누르기 전까지는 갱신 실패 시에도 세션을 삭제하지 않음)
-  Future<http.Client?> reauthenticate({bool interactive = false}) async {
-    if (_isDesktopAuth) {
-      return _desktopAuthenticatedClient();
-    }
-
-    if (_isWebAuth) {
-      final sessionData = await GoogleSessionStorage.loadSession();
-      if (sessionData != null) {
+  /// Web 토큰 갱신:
+  /// 1. Vercel Serverless Function (/api/google/token)으로 refresh_token 기반 갱신
+  /// 2. 실패 시 브라우저 GIS Token Client (prompt: '') 로 백그라운드 무팝업 사일런트 갱신
+  /// 3. [interactive] == true 이면 GIS Token Client (prompt: 'select_account') 로 팝업 재인증 갱신
+  Future<String?> _refreshWebAccessToken({
+    required GoogleSessionData sessionData,
+    bool interactive = false,
+  }) async {
+    // 1단계: Vercel Serverless Function (/api/google/token)
+    if (sessionData.encryptedRefreshToken != null) {
+      try {
         final serverResult = await GoogleTokenRefresher.fetchFreshAccessToken(
           encryptedRefreshToken: sessionData.encryptedRefreshToken,
         );
-        if (serverResult != null) {
+        if (serverResult != null && serverResult.accessToken.isNotEmpty) {
           await GoogleSessionStorage.saveSession(GoogleSessionData(
             id: sessionData.id,
             email: sessionData.email,
@@ -408,7 +426,85 @@ class GoogleAuthService {
             encryptedRefreshToken: serverResult.encryptedRefreshToken ?? sessionData.encryptedRefreshToken,
             expiresAt: serverResult.expiresAt,
           ));
-          final headers = {'Authorization': 'Bearer ${serverResult.accessToken}'};
+          debugPrint('Web token successfully refreshed via Serverless API');
+          return serverResult.accessToken;
+        }
+      } catch (e) {
+        debugPrint('Serverless token refresh error: $e');
+      }
+    }
+
+    // 2단계: 브라우저 GIS Token Client 사일런트 갱신 (prompt: '')
+    if (customClientId != null) {
+      try {
+        final clientResult = await GoogleTokenRefresher.requestAccessToken(
+          clientId: customClientId!,
+          scopes: _scopes,
+          prompt: '',
+        );
+        if (clientResult != null && clientResult.accessToken.isNotEmpty) {
+          await GoogleSessionStorage.saveSession(GoogleSessionData(
+            id: sessionData.id,
+            email: sessionData.email,
+            displayName: sessionData.displayName,
+            photoUrl: sessionData.photoUrl,
+            accessToken: clientResult.accessToken,
+            encryptedRefreshToken: sessionData.encryptedRefreshToken,
+            expiresAt: clientResult.expiresAt,
+          ));
+          debugPrint('Web token successfully refreshed via GIS Silent Token Client');
+          return clientResult.accessToken;
+        }
+      } catch (e) {
+        debugPrint('GIS silent token refresh error: $e');
+      }
+    }
+
+    // 3단계: 인터랙티브 모드 (사용자가 '지금 동기화' 버튼을 눌렀을 때만 팝업 허용)
+    if (interactive && customClientId != null) {
+      try {
+        final clientResult = await GoogleTokenRefresher.requestAccessToken(
+          clientId: customClientId!,
+          scopes: _scopes,
+          prompt: 'select_account',
+        );
+        if (clientResult != null && clientResult.accessToken.isNotEmpty) {
+          await GoogleSessionStorage.saveSession(GoogleSessionData(
+            id: sessionData.id,
+            email: sessionData.email,
+            displayName: sessionData.displayName,
+            photoUrl: sessionData.photoUrl,
+            accessToken: clientResult.accessToken,
+            encryptedRefreshToken: sessionData.encryptedRefreshToken,
+            expiresAt: clientResult.expiresAt,
+          ));
+          debugPrint('Web token successfully refreshed via GIS Interactive Token Client');
+          return clientResult.accessToken;
+        }
+      } catch (e) {
+        debugPrint('GIS interactive token refresh error: $e');
+      }
+    }
+
+    return null;
+  }
+
+  /// 토큰 만료 시 재인증 및 새 클라이언트 반환
+  /// (사용자가 '연결 해제'를 누르기 전까지는 갱신 실패 시에도 세션을 삭제하지 않음)
+  Future<http.Client?> reauthenticate({bool interactive = false}) async {
+    if (_isDesktopAuth) {
+      return _desktopAuthenticatedClient();
+    }
+
+    if (_isWebAuth) {
+      final sessionData = await GoogleSessionStorage.loadSession();
+      if (sessionData != null) {
+        final freshToken = await _refreshWebAccessToken(
+          sessionData: sessionData,
+          interactive: interactive,
+        );
+        if (freshToken != null && freshToken.isNotEmpty) {
+          final headers = {'Authorization': 'Bearer $freshToken'};
           return _AuthenticatedClient(headers, http.Client());
         }
       }
@@ -476,22 +572,14 @@ class GoogleAuthService {
           return _AuthenticatedClient(headers, http.Client());
         }
 
-        // 2) 만료되었을 경우 Vercel Serverless Function (/api/google/token)으로 갱신 시도
+        // 2) 만료되었을 경우 3중 갱신 시도
         if (_isWebAuth) {
-          final serverResult = await GoogleTokenRefresher.fetchFreshAccessToken(
-            encryptedRefreshToken: sessionData.encryptedRefreshToken,
+          final freshToken = await _refreshWebAccessToken(
+            sessionData: sessionData,
+            interactive: interactive,
           );
-          if (serverResult != null) {
-            await GoogleSessionStorage.saveSession(GoogleSessionData(
-              id: sessionData.id,
-              email: sessionData.email,
-              displayName: sessionData.displayName,
-              photoUrl: sessionData.photoUrl,
-              accessToken: serverResult.accessToken,
-              encryptedRefreshToken: serverResult.encryptedRefreshToken ?? sessionData.encryptedRefreshToken,
-              expiresAt: serverResult.expiresAt,
-            ));
-            final headers = {'Authorization': 'Bearer ${serverResult.accessToken}'};
+          if (freshToken != null && freshToken.isNotEmpty) {
+            final headers = {'Authorization': 'Bearer $freshToken'};
             return _AuthenticatedClient(headers, http.Client());
           }
         }

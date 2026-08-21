@@ -12,6 +12,14 @@ external void _requestGoogleAuthCode(
   JSFunction callback,
 );
 
+@JS('requestGoogleAccessToken')
+external void _requestGoogleAccessToken(
+  JSString clientId,
+  JSString scopesStr,
+  JSString promptMode,
+  JSFunction callback,
+);
+
 @JS('consumeRedirectCode')
 external JSString? _consumeRedirectCode();
 
@@ -165,6 +173,80 @@ class GoogleTokenRefresher {
       );
     } catch (e) {
       debugPrint('fetchFreshAccessToken exception: $e');
+      return null;
+    }
+  }
+
+  /// 브라우저 GIS Token Client를 통해 access_token을 직접 갱신/발급받는다.
+  /// - prompt == '' (기본값): 기존 구글 세션으로 백그라운드 무팝업 사일런트 갱신 (사용자 방해 없음)
+  /// - prompt == 'select_account' / 'consent': 팝업을 통한 인터랙티브 로그인/갱신
+  static Future<GoogleTokenRefreshResult?> requestAccessToken({
+    required String clientId,
+    required List<String> scopes,
+    String prompt = '',
+  }) async {
+    try {
+      final completer = Completer<GoogleTokenRefreshResult?>();
+      final scopesStr = scopes.join(' ');
+
+      final jsCallback = (JSString? token, JSNumber? expiresIn, JSString? err) {
+        if (!completer.isCompleted) {
+          if (err != null && err.toDart.isNotEmpty) {
+            debugPrint('requestAccessToken error: ${err.toDart}');
+            completer.complete(null);
+          } else if (token != null && token.toDart.isNotEmpty) {
+            final secs = expiresIn != null ? expiresIn.toDartInt : 3600;
+            completer.complete(GoogleTokenRefreshResult(
+              accessToken: token.toDart,
+              expiresAt: DateTime.now().add(Duration(seconds: secs)),
+            ));
+          } else {
+            completer.complete(null);
+          }
+        }
+      }.toJS;
+
+      _requestGoogleAccessToken(
+        clientId.toJS,
+        scopesStr.toJS,
+        prompt.toJS,
+        jsCallback,
+      );
+
+      final timeoutSecs = prompt.isEmpty ? 15 : 60;
+      return await completer.future.timeout(
+        Duration(seconds: timeoutSecs),
+        onTimeout: () {
+          debugPrint('requestAccessToken timed out (prompt="$prompt").');
+          return null;
+        },
+      );
+    } catch (e) {
+      debugPrint('requestAccessToken exception: $e');
+      return null;
+    }
+  }
+
+  /// Google UserInfo API 호출 (access_token으로 사용자 프로필 조회)
+  static Future<Map<String, dynamic>?> fetchUserInfo(String accessToken) async {
+    try {
+      final response = await web.window.fetch(
+        'https://www.googleapis.com/oauth2/v2/userinfo'.toJS,
+        web.RequestInit(
+          method: 'GET',
+          headers: web.Headers({'Authorization': 'Bearer $accessToken'}.jsify() as JSObject),
+        ),
+      ).toDart;
+
+      if (!response.ok) {
+        debugPrint('fetchUserInfo failed with status ${response.status}');
+        return null;
+      }
+
+      final text = (await response.text().toDart).toDart;
+      return jsonDecode(text) as Map<String, dynamic>;
+    } catch (e) {
+      debugPrint('fetchUserInfo error: $e');
       return null;
     }
   }

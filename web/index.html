@@ -77,6 +77,42 @@
       }
     };
 
+    window.requestGoogleAccessToken = function(clientId, scopesStr, promptMode, callback) {
+      if (!window.google || !window.google.accounts || !window.google.accounts.oauth2) {
+        console.error("GIS not loaded yet");
+        callback(null, 0, "GIS SDK not loaded");
+        return;
+      }
+      try {
+        var client = google.accounts.oauth2.initTokenClient({
+          client_id: clientId,
+          scope: scopesStr,
+          prompt: promptMode || '',
+          callback: function(response) {
+            if (response.error) {
+              console.warn("GIS token response error:", response.error);
+              callback(null, 0, response.error);
+            } else if (response.access_token) {
+              var expiresIn = response.expires_in ? parseInt(response.expires_in) : 3600;
+              callback(response.access_token, expiresIn, null);
+            } else {
+              callback(null, 0, "No access token received");
+            }
+          },
+          error_callback: function(err) {
+            console.warn("GIS token error_callback:", err);
+            var errMsg = err ? (err.message || JSON.stringify(err)) : "Unknown error";
+            callback(null, 0, errMsg);
+          }
+        });
+
+        // prompt: '' 는 팝업 없이 기존 브라우저 구글 세션으로 백그라운드 무중단 갱신
+        client.requestAccessToken({ prompt: promptMode || '' });
+      } catch (e) {
+        callback(null, 0, e.toString());
+      }
+    };
+
     window.consumeRedirectCode = function() {
       return null;
     };

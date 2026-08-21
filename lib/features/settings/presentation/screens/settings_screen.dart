@@ -937,8 +937,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   Future<void> _triggerGoogleSync() async {
     setState(() => _isGoogleSyncing = true);
-    // 동기화 시에는 불필요한 연쇄 팝업 창을 띄우지 않고 백그라운드 서버 API로 토큰을 조용히 갱신한다.
-    final success = await GoogleDriveSyncService().sync(interactive: false);
+    // 수동 동기화 버튼 클릭 시: 사일런트 갱신 우선 시도 후, 필요시 사용자 인터랙티브 갱신까지 허용
+    final success = await GoogleDriveSyncService().sync(interactive: true);
     if (mounted) {
       setState(() => _isGoogleSyncing = false);
       if (success) {
