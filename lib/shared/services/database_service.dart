@@ -58,6 +58,29 @@ class DatabaseService {
     }
   }
 
+  /// 스키마 마이그레이션 (웹/네이티브 공통 — 버전 추가 시 여기만 수정)
+  static Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 3) {
+      await _addColumnSafe(db, 'words', 'image_path', 'TEXT');
+    }
+    if (oldVersion < 4) {
+      await _addColumnSafe(db, 'review_cards', 'easiness_factor', 'REAL', defaultValue: '2.5');
+      await _addColumnSafe(db, 'review_cards', 'interval', 'INTEGER', defaultValue: '0');
+      await _addColumnSafe(db, 'review_cards', 'repetition', 'INTEGER', defaultValue: '0');
+    }
+    if (oldVersion < 5) {
+      await _addColumnSafe(db, 'review_logs', 'study_method', 'TEXT');
+      await _addColumnSafe(db, 'review_logs', 'duration_ms', 'INTEGER');
+      await _addColumnSafe(db, 'review_logs', 'answer_type', 'TEXT');
+    }
+    if (oldVersion < 6) {
+      await _addColumnSafe(db, 'review_cards', 'override_method', 'TEXT');
+    }
+    if (oldVersion < 7) {
+      await _addColumnSafe(db, 'words', 'dictionary_url', 'TEXT');
+    }
+  }
+
   static Future<Database> _initDatabase() async {
     if (kIsWeb) {
       final dbFactory = databaseFactoryFfiWeb;
@@ -66,27 +89,7 @@ class DatabaseService {
           options: OpenDatabaseOptions(
             version: _dbVersion,
             onCreate: _createDatabase,
-            onUpgrade: (db, oldVersion, newVersion) async {
-              if (oldVersion < 3) {
-                await _addColumnSafe(db, 'words', 'image_path', 'TEXT');
-              }
-              if (oldVersion < 4) {
-                await _addColumnSafe(db, 'review_cards', 'easiness_factor', 'REAL', defaultValue: '2.5');
-                await _addColumnSafe(db, 'review_cards', 'interval', 'INTEGER', defaultValue: '0');
-                await _addColumnSafe(db, 'review_cards', 'repetition', 'INTEGER', defaultValue: '0');
-              }
-              if (oldVersion < 5) {
-                await _addColumnSafe(db, 'review_logs', 'study_method', 'TEXT');
-                await _addColumnSafe(db, 'review_logs', 'duration_ms', 'INTEGER');
-                await _addColumnSafe(db, 'review_logs', 'answer_type', 'TEXT');
-              }
-              if (oldVersion < 6) {
-                await _addColumnSafe(db, 'review_cards', 'override_method', 'TEXT');
-              }
-              if (oldVersion < 7) {
-                await _addColumnSafe(db, 'words', 'dictionary_url', 'TEXT');
-              }
-            },
+            onUpgrade: _onUpgrade,
           ),
         );
     }
@@ -95,27 +98,7 @@ class DatabaseService {
       path,
       version: _dbVersion,
       onCreate: _createDatabase,
-      onUpgrade: (db, oldVersion, newVersion) async {
-        if (oldVersion < 3) {
-          await _addColumnSafe(db, 'words', 'image_path', 'TEXT');
-        }
-        if (oldVersion < 4) {
-          await _addColumnSafe(db, 'review_cards', 'easiness_factor', 'REAL', defaultValue: '2.5');
-          await _addColumnSafe(db, 'review_cards', 'interval', 'INTEGER', defaultValue: '0');
-          await _addColumnSafe(db, 'review_cards', 'repetition', 'INTEGER', defaultValue: '0');
-        }
-        if (oldVersion < 5) {
-          await _addColumnSafe(db, 'review_logs', 'study_method', 'TEXT');
-          await _addColumnSafe(db, 'review_logs', 'duration_ms', 'INTEGER');
-          await _addColumnSafe(db, 'review_logs', 'answer_type', 'TEXT');
-        }
-        if (oldVersion < 6) {
-          await _addColumnSafe(db, 'review_cards', 'override_method', 'TEXT');
-        }
-        if (oldVersion < 7) {
-          await _addColumnSafe(db, 'words', 'dictionary_url', 'TEXT');
-        }
-      },
+      onUpgrade: _onUpgrade,
     );
   }
 
