@@ -38,6 +38,19 @@ SQLite requires platform-specific backends. Must init **before any DB call**.
 
 See `lib/main.dart:9-15` and `lib/shared/services/database_service.dart:17-33`. Always test on target platform.
 
+## Google OAuth setup (desktop)
+
+데스크톱(Linux/Windows) 구글 로그인은 gitignored 시크릿 파일이 필요하다.
+파일이 없으면 **컴파일 자체가 실패**한다 (analyze/test/build 전부).
+
+```bash
+cp lib/shared/services/oauth_credentials.example.dart \
+   lib/shared/services/oauth_credentials.dart   # clientId 채워 넣기
+```
+
+- `clientSecret`은 선택값 — 설치형 앱은 PKCE만으로 동작 (`desktop_google_auth_service.dart` 참고)
+- 웹용 Client ID는 공개 값이라 커밋됨: `lib/shared/services/oauth_public_ids.dart`
+
 ## Project architecture
 
 - **Entry**: `lib/main.dart` → `lib/app.dart` → `lib/home/home_screen.dart`
@@ -46,32 +59,30 @@ See `lib/main.dart:9-15` and `lib/shared/services/database_service.dart:17-33`. 
 - **Features** in `lib/features/<name>/`:
   - `words/` — models, repos, screens (list + form), widgets (card)
   - `review/` — models, repos, screens (review home + flashcard)
-  - `quiz/` — screens (quiz type, meaning quiz, fill blank)
+  - `quiz/` — screens (quiz type, meaning quiz, fill blank, meaning/spelling typing)
   - `matching/` — screens (matching type, word matching, grid matching)
-  - `settings/` — screens (dark mode, review method, export/import, delete all)
+  - `achievements/` — 업적 평가/서비스 + 컬렉션·인증서 화면
+  - `settings/` — screens (dark mode, review method, export/import, delete all) + data services (backup, home widget, review reminder)
+- **Google Drive sync**: `lib/shared/services/google_*.dart` (auth/drive/sync/session/token-refresh)
+- **Shared widgets**: `lib/shared/widgets/cabinet_*.dart` (garden, streak, badges, surfaces 등)
 - **File picker/saver**: conditional exports in `lib/core/utils/` — platform-specific impls per file triplet
 - **Riverpod providers**: screen-local (same file as screen), not in dedicated `providers/` dirs
 
-## Remaining work (from PLAN.md)
+## Tests
 
-- Meaning typing (Phase 7)
-- Spelling typing (Phase 7)
-- Auto backup (Phase 8)
-- Local notifications (Phase 8)
-- Home widget (Phase 8)
-- Proper tests (Phase 9 — current `test/widget_test.dart` is a stub)
+23개 테스트 파일, 약 140+ 테스트 — 전부 통과해야 함.
 
-## Test current state
-
-`test/widget_test.dart` only calls `runApp()` — no assertions. Needs `ProviderScope` + DB mock (`sqflite_common_ffi` for tests).
+- 단위 + 위젯 테스트 혼재. DB는 `DatabaseService.setTestDatabaseInMemory()`로 인메모리 대체 (`test/helpers.dart` 참고)
+- `flutter test` 한 번에 전부 실행. 개별 파일: `flutter test test/model_test.dart`
 
 ## Gotchas
 
 - `file_picker` prints warnings for linux/macos/windows default plugins — harmless
 - Web build shows `dart:html` unsupported warnings for `file_picker`/`share_plus` — they work at runtime
-- `PLAN.md` documents full architecture but some paths in tree diagram don't exist (no feature barrels, no `shared/widgets/`)
 - Riverpod providers are screen-local (defined in same file as screen)
-- DB factory **must be initialized before any DB call** (see `main.dart:9-15`)
+- DB factory **must be initialized before any DB call** (see `main.dart`)
+- DB 마이그레이션은 `_onUpgrade` 하나에서만 관리 (`database_service.dart`) — 웹/네이티브 분기 각각 수정 금지
+- 거대 파일 주의: 설정/대시보드/정원은 셸 + 위젯 분할 구조다 — `settings/presentation/widgets/settings_*_tab.dart`, `home/widgets/dashboard_*.dart`, `shared/widgets/cabinet_plant_painter.dart` 참고
 
 ## Agent skills
 
