@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'desktop_google_auth_service.dart';
 import 'google_session_storage.dart';
 import 'google_token_refresh.dart';
+import 'oauth_public_ids.dart';
 
 typedef TokenRefreshHandler = Future<GoogleTokenRefreshResult?> Function({
   required String clientId,
@@ -85,8 +86,8 @@ class GoogleAuthService {
     'https://www.googleapis.com/auth/drive.appdata',
   ];
 
-  /// Web/Desktop 환경용 OAuth Client ID
-  static String? customClientId = '1002909356316-llhqdfguevm9je83uhtdqblgm5621ra1.apps.googleusercontent.com';
+  /// Web/Desktop 환경용 OAuth Client ID (공개 값 — [OAuthPublicIds] 단일 소스)
+  static String? customClientId = OAuthPublicIds.webClientId;
 
   GoogleSignInAccount? _signedInAccount;
   GoogleAuthUser? _savedWebUser;

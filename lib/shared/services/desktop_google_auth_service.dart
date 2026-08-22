@@ -49,6 +49,15 @@ class DesktopGoogleAuthService {
     'https://www.googleapis.com/auth/drive.appdata',
   ];
 
+  /// 설치형(데스크톱) 앱은 PKCE만으로 안전하며 client_secret은 선택값이다(RFC 8252).
+  /// 값이 설정된 경우에만 토큰 요청에 포함한다.
+  static Map<String, String> _tokenBody(Map<String, String> body) {
+    if (clientSecret.isNotEmpty) {
+      body['client_secret'] = clientSecret;
+    }
+    return body;
+  }
+
   DesktopGoogleAccount? _currentAccount;
   DesktopGoogleAccount? get currentAccount => _currentAccount;
 
@@ -139,12 +148,11 @@ class DesktopGoogleAuthService {
     try {
       final response = await http.post(
         Uri.parse('https://oauth2.googleapis.com/token'),
-        body: {
+        body: _tokenBody({
           'client_id': clientId,
-          'client_secret': clientSecret,
           'grant_type': 'refresh_token',
           'refresh_token': _currentAccount!.refreshToken!,
-        },
+        }),
       );
 
       if (response.statusCode == 200) {
@@ -175,10 +183,11 @@ class DesktopGoogleAuthService {
   }
 
   Future<DesktopGoogleAccount?> signIn() async {
-    if (!OAuthCredentials.hasClientSecret) {
+    if (clientId.isEmpty) {
       throw Exception(
-        'OAUTH_CLIENT_SECRET이 설정되지 않았습니다. '
-        '--dart-define=OAUTH_CLIENT_SECRET=... 로 빌드 시 주입해 주세요.',
+        'OAuth clientId가 설정되지 않았습니다. '
+        'lib/shared/services/oauth_credentials.dart를 생성해 값을 채워 주세요. '
+        '(템플릿: oauth_credentials.example.dart)',
       );
     }
     HttpServer? server;
@@ -242,17 +251,16 @@ class DesktopGoogleAuthService {
         throw Exception('No auth code received from Google');
       }
 
-      // 4. Auth Code를 Access Token으로 교환 (PKCE code_verifier 및 client_secret 포함)
+      // 4. Auth Code를 Access Token으로 교환 (PKCE code_verifier 포함, client_secret은 설정 시)
       final tokenResponse = await http.post(
         Uri.parse('https://oauth2.googleapis.com/token'),
-        body: {
+        body: _tokenBody({
           'client_id': clientId,
-          'client_secret': clientSecret,
           'code': code,
           'grant_type': 'authorization_code',
           'redirect_uri': redirectUri,
           'code_verifier': codeVerifier,
-        },
+        }),
       );
 
       if (tokenResponse.statusCode != 200) {
