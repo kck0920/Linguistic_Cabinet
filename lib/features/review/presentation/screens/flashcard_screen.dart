@@ -180,57 +180,93 @@ class _FlashcardScreenState extends ConsumerState<FlashcardScreen>
 
               // Main Flashcard Container
               Expanded(
-                child: Center(
-                  child: Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      GestureDetector(
-                        onTap: _toggleFlip,
-                        onHorizontalDragEnd: (details) {
-                          if (details.primaryVelocity != null) {
-                            if (details.primaryVelocity! > 100) {
-                              _handleAnswer(true); // Swipe Right -> Known
-                            } else if (details.primaryVelocity! < -100) {
-                              _handleAnswer(false); // Swipe Left -> Again
-                            }
-                          }
-                        },
-                        child: AnimatedBuilder(
-                          animation: _flipController,
-                          builder: (context, child) {
-                            final angle = _flipController.value * math.pi;
-                            final isFront = angle < math.pi / 2;
-                            return Transform(
-                              transform: Matrix4.identity()
-                                ..setEntry(3, 2, 0.001)
-                                ..rotateY(angle),
-                              alignment: Alignment.center,
-                              child: isFront
-                                  ? _buildFrontCard(word, colors, theme)
-                                  : Transform(
-                                      transform: Matrix4.identity()..rotateY(math.pi),
-                                      alignment: Alignment.center,
-                                      child: _buildBackCard(word, colors, theme),
-                                    ),
-                            );
-                          },
-                        ),
-                      ),
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final availableWidth = constraints.maxWidth;
+                    final availableHeight = constraints.maxHeight;
 
-                      // Stamp Overlay on Action
-                      if (_lastStamp != null)
-                        Positioned.fill(
-                          child: Center(
-                            child: CabinetStamp(
-                              text: _lastStamp!,
-                              color: _lastStamp == 'KNOWN' ? colors.accent3 : colors.accent,
-                              fontSize: 32,
-                              rotateDegrees: _lastStamp == 'KNOWN' ? 12 : -12,
+                    // 모바일 및 데스크탑 반응형 카드 크기 계산:
+                    // 1. 너비: 모바일에서는 화면 폭에 맞추고, 데스크탑에서는 가독성 최적 너비인 최대 580px
+                    final double cardWidth = math.min(availableWidth, 580.0);
+
+                    // 2. 높이: 모바일/데스크탑 모두에서 가용 높이를 최대한 활용하여
+                    // 위, 아래(세로) 크기를 큼직하게 확장 (데스크탑 최대 660px)
+                    final double verticalMargin = availableHeight > 400 ? 16.0 : 8.0;
+                    final double targetHeight = availableHeight - verticalMargin;
+                    final double maxCardHeight = 660.0;
+                    final double cardHeight = targetHeight > 0
+                        ? math.min(targetHeight, maxCardHeight)
+                        : availableHeight;
+
+                    return Center(
+                      child: Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          GestureDetector(
+                            onTap: _toggleFlip,
+                            onHorizontalDragEnd: (details) {
+                              if (details.primaryVelocity != null) {
+                                if (details.primaryVelocity! > 100) {
+                                  _handleAnswer(true); // Swipe Right -> Known
+                                } else if (details.primaryVelocity! < -100) {
+                                  _handleAnswer(false); // Swipe Left -> Again
+                                }
+                              }
+                            },
+                            child: AnimatedBuilder(
+                              animation: _flipController,
+                              builder: (context, child) {
+                                final angle = _flipController.value * math.pi;
+                                final isFront = angle < math.pi / 2;
+                                return Transform(
+                                  transform: Matrix4.identity()
+                                    ..setEntry(3, 2, 0.001)
+                                    ..rotateY(angle),
+                                  alignment: Alignment.center,
+                                  child: isFront
+                                      ? _buildFrontCard(
+                                          word,
+                                          colors,
+                                          theme,
+                                          width: cardWidth,
+                                          height: cardHeight,
+                                        )
+                                      : Transform(
+                                          transform: Matrix4.identity()
+                                            ..rotateY(math.pi),
+                                          alignment: Alignment.center,
+                                          child: _buildBackCard(
+                                            word,
+                                            colors,
+                                            theme,
+                                            width: cardWidth,
+                                            height: cardHeight,
+                                          ),
+                                        ),
+                                );
+                              },
                             ),
                           ),
-                        ),
-                    ],
-                  ),
+
+                          // Stamp Overlay on Action
+                          if (_lastStamp != null)
+                            Positioned.fill(
+                              child: Center(
+                                child: CabinetStamp(
+                                  text: _lastStamp!,
+                                  color: _lastStamp == 'KNOWN'
+                                      ? colors.accent3
+                                      : colors.accent,
+                                  fontSize: 32,
+                                  rotateDegrees:
+                                      _lastStamp == 'KNOWN' ? 12 : -12,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    );
+                  },
                 ),
               ),
               const SizedBox(height: 20),
@@ -276,12 +312,18 @@ class _FlashcardScreenState extends ConsumerState<FlashcardScreen>
     );
   }
 
-  Widget _buildFrontCard(Word word, CabinetColors colors, CabinetTheme theme) {
+  Widget _buildFrontCard(
+    Word word,
+    CabinetColors colors,
+    CabinetTheme theme, {
+    required double width,
+    required double height,
+  }) {
     return CabinetPaperCard(
       colors: colors,
-      width: 540,
-      height: 380,
-      padding: const EdgeInsets.all(28),
+      width: width,
+      height: height,
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
@@ -294,7 +336,7 @@ class _FlashcardScreenState extends ConsumerState<FlashcardScreen>
           if (word.pronunciation != null && word.pronunciation!.isNotEmpty) ...[
             const SizedBox(height: 8),
             ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 480),
+              constraints: BoxConstraints(maxWidth: math.max(0.0, width - 48)),
               child: FittedBox(
                 fit: BoxFit.scaleDown,
                 child: Text(
@@ -316,11 +358,17 @@ class _FlashcardScreenState extends ConsumerState<FlashcardScreen>
     );
   }
 
-  Widget _buildBackCard(Word word, CabinetColors colors, CabinetTheme theme) {
+  Widget _buildBackCard(
+    Word word,
+    CabinetColors colors,
+    CabinetTheme theme, {
+    required double width,
+    required double height,
+  }) {
     return CabinetPaperCard(
       colors: colors,
-      width: 540,
-      height: 380,
+      width: width,
+      height: height,
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
       child: Column(
         children: [
@@ -328,17 +376,18 @@ class _FlashcardScreenState extends ConsumerState<FlashcardScreen>
           const SizedBox(height: 12),
           Expanded(
             child: SingleChildScrollView(
+              physics: const BouncingScrollPhysics(),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 480),
+                    constraints: BoxConstraints(maxWidth: math.max(0.0, width - 48)),
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                       child: Text(
                         word.korean,
                         textAlign: TextAlign.center,
-                        maxLines: 2,
+                        maxLines: 3,
                         overflow: TextOverflow.ellipsis,
                         style: theme.meaningSerif.copyWith(
                           fontSize: 22,
@@ -350,10 +399,13 @@ class _FlashcardScreenState extends ConsumerState<FlashcardScreen>
                   ),
                   if (word.exampleSentence != null && word.exampleSentence!.isNotEmpty) ...[
                     const SizedBox(height: 12),
-                    Text(
-                      '"${word.exampleSentence}"',
-                      textAlign: TextAlign.center,
-                      style: theme.meaningSerif.copyWith(fontSize: 15, color: colors.ink2),
+                    ConstrainedBox(
+                      constraints: BoxConstraints(maxWidth: math.max(0.0, width - 48)),
+                      child: Text(
+                        '"${word.exampleSentence}"',
+                        textAlign: TextAlign.center,
+                        style: theme.meaningSerif.copyWith(fontSize: 15, color: colors.ink2),
+                      ),
                     ),
                   ],
                   if (word.memo != null && word.memo!.isNotEmpty) ...[
