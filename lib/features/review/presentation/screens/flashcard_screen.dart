@@ -186,14 +186,17 @@ class _FlashcardScreenState extends ConsumerState<FlashcardScreen>
                     final availableHeight = constraints.maxHeight;
 
                     // 모바일 및 데스크탑 반응형 카드 크기 계산:
-                    // 1. 너비: 모바일에서는 화면 폭에 맞추고, 데스크탑에서는 가독성 최적 너비인 최대 580px
-                    final double cardWidth = math.min(availableWidth, 580.0);
+                    // 1. 너비: 모바일은 화면 폭 100%를 활용하고, 데스크탑에서는 화면 크기에 맞춰 최대 960px까지 시원하게 확장
+                    final double maxAllowedWidth = availableWidth > 800
+                        ? math.min(availableWidth * 0.75, 960.0)
+                        : availableWidth;
+                    final double cardWidth = math.max(300.0, maxAllowedWidth);
 
-                    // 2. 높이: 모바일/데스크탑 모두에서 가용 높이를 최대한 활용하여
-                    // 위, 아래(세로) 크기를 큼직하게 확장 (데스크탑 최대 660px)
-                    final double verticalMargin = availableHeight > 400 ? 16.0 : 8.0;
+                    // 2. 높이: 모바일/데스크탑 모두 가용 높이를 거의 전폭 활용 (여백 최소화)
+                    // 대형 데스크탑 화면에서는 최대 880px까지 위아래로 대폭 확장
+                    final double verticalMargin = availableHeight > 500 ? 16.0 : 8.0;
                     final double targetHeight = availableHeight - verticalMargin;
-                    final double maxCardHeight = 660.0;
+                    final double maxCardHeight = 880.0;
                     final double cardHeight = targetHeight > 0
                         ? math.min(targetHeight, maxCardHeight)
                         : availableHeight;
@@ -319,11 +322,15 @@ class _FlashcardScreenState extends ConsumerState<FlashcardScreen>
     required double width,
     required double height,
   }) {
+    final isLarge = width > 600;
     return CabinetPaperCard(
       colors: colors,
       width: width,
       height: height,
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+      padding: EdgeInsets.symmetric(
+        horizontal: isLarge ? 36 : 24,
+        vertical: isLarge ? 32 : 24,
+      ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
@@ -334,16 +341,16 @@ class _FlashcardScreenState extends ConsumerState<FlashcardScreen>
             child: Text(word.english, style: theme.wordHuge),
           ),
           if (word.pronunciation != null && word.pronunciation!.isNotEmpty) ...[
-            const SizedBox(height: 8),
+            const SizedBox(height: 10),
             ConstrainedBox(
-              constraints: BoxConstraints(maxWidth: math.max(0.0, width - 48)),
+              constraints: BoxConstraints(maxWidth: math.max(0.0, width - 64)),
               child: FittedBox(
                 fit: BoxFit.scaleDown,
                 child: Text(
                   word.pronunciation!,
                   textAlign: TextAlign.center,
                   style: theme.labelMono.copyWith(
-                    fontSize: 14,
+                    fontSize: isLarge ? 16 : 14,
                     height: 1.45,
                     color: colors.ink3,
                   ),
@@ -352,7 +359,10 @@ class _FlashcardScreenState extends ConsumerState<FlashcardScreen>
             ),
           ],
           const Spacer(),
-          Text('뜻이 떠오르나요? Tap to flip ↺', style: theme.handNote.copyWith(fontSize: 20)),
+          Text(
+            '뜻이 떠오르나요? Tap to flip ↺',
+            style: theme.handNote.copyWith(fontSize: isLarge ? 22 : 20),
+          ),
         ],
       ),
     );
@@ -365,15 +375,19 @@ class _FlashcardScreenState extends ConsumerState<FlashcardScreen>
     required double width,
     required double height,
   }) {
+    final isLarge = width > 600;
     return CabinetPaperCard(
       colors: colors,
       width: width,
       height: height,
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+      padding: EdgeInsets.symmetric(
+        horizontal: isLarge ? 36 : 24,
+        vertical: isLarge ? 28 : 20,
+      ),
       child: Column(
         children: [
           Text('READING CARD · BACK', style: theme.labelMono),
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
           Expanded(
             child: SingleChildScrollView(
               physics: const BouncingScrollPhysics(),
@@ -381,16 +395,16 @@ class _FlashcardScreenState extends ConsumerState<FlashcardScreen>
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   ConstrainedBox(
-                    constraints: BoxConstraints(maxWidth: math.max(0.0, width - 48)),
+                    constraints: BoxConstraints(maxWidth: math.max(0.0, width - 64)),
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                       child: Text(
                         word.korean,
                         textAlign: TextAlign.center,
-                        maxLines: 3,
+                        maxLines: 4,
                         overflow: TextOverflow.ellipsis,
                         style: theme.meaningSerif.copyWith(
-                          fontSize: 22,
+                          fontSize: isLarge ? 26 : 22,
                           height: 1.35,
                           fontWeight: FontWeight.w600,
                         ),
@@ -398,21 +412,25 @@ class _FlashcardScreenState extends ConsumerState<FlashcardScreen>
                     ),
                   ),
                   if (word.exampleSentence != null && word.exampleSentence!.isNotEmpty) ...[
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 16),
                     ConstrainedBox(
-                      constraints: BoxConstraints(maxWidth: math.max(0.0, width - 48)),
+                      constraints: BoxConstraints(maxWidth: math.max(0.0, width - 64)),
                       child: Text(
                         '"${word.exampleSentence}"',
                         textAlign: TextAlign.center,
-                        style: theme.meaningSerif.copyWith(fontSize: 15, color: colors.ink2),
+                        style: theme.meaningSerif.copyWith(
+                          fontSize: isLarge ? 17 : 15,
+                          height: 1.45,
+                          color: colors.ink2,
+                        ),
                       ),
                     ),
                   ],
                   if (word.memo != null && word.memo!.isNotEmpty) ...[
-                    const SizedBox(height: 14),
+                    const SizedBox(height: 16),
                     Container(
                       width: double.infinity,
-                      padding: const EdgeInsets.all(12),
+                      padding: EdgeInsets.all(isLarge ? 18 : 14),
                       decoration: BoxDecoration(
                         color: colors.paper3,
                         borderRadius: BorderRadius.circular(2),
@@ -423,12 +441,19 @@ class _FlashcardScreenState extends ConsumerState<FlashcardScreen>
                         children: [
                           Text(
                             'Moment Note:',
-                            style: theme.labelMono.copyWith(fontSize: 10, color: colors.accent, fontWeight: FontWeight.w700),
+                            style: theme.labelMono.copyWith(
+                              fontSize: isLarge ? 12 : 10,
+                              color: colors.accent,
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
-                          const SizedBox(height: 6),
+                          const SizedBox(height: 8),
                           MarkdownBody(
                             data: word.memo!,
-                            styleSheet: theme.buildMarkdownStyle(fontSize: 16, textColor: colors.ink),
+                            styleSheet: theme.buildMarkdownStyle(
+                              fontSize: isLarge ? 17 : 16,
+                              textColor: colors.ink,
+                            ),
                           ),
                         ],
                       ),

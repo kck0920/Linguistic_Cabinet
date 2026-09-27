@@ -23,8 +23,13 @@ class DashboardRecentStrip extends ConsumerWidget {
       ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
 
     // 최근 등록일(createdAt) 기준 내림차순 정렬하여 최신 4장 추출
+    // createdAt이 동일한 경우(동시 import 등) 원래 리스트의 역순을 2차 기준으로 삼아 최신 단어 우선 보장
     final recent = List<Word>.from(words)
-      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      ..sort((a, b) {
+        final cmp = b.createdAt.compareTo(a.createdAt);
+        if (cmp != 0) return cmp;
+        return words.indexOf(b).compareTo(words.indexOf(a));
+      });
     final displayWords = recent.take(4).toList();
 
     return Column(
