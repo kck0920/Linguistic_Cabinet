@@ -187,6 +187,7 @@ class _SettingsDataTabState extends ConsumerState<SettingsDataTab> {
     // Collection & Words
     ref.invalidate(wordListProvider);
     ref.invalidate(filteredWordsProvider);
+    ref.invalidate(catalogNumberProvider);
     ref.read(searchQueryProvider.notifier).state = '';
     ref.read(selectedTagFilterProvider.notifier).state = 'all';
     ref.read(sortOrderProvider.notifier).state = 'recent';

@@ -9,6 +9,7 @@ import '../../data/repositories/word_repository.dart';
 import '../../../../core/theme/cabinet_colors.dart';
 import '../../../../core/theme/cabinet_theme.dart';
 import '../../../../shared/widgets/cabinet_widgets.dart';
+import '../../../../core/utils/word_catalog_number.dart';
 import '../../../../core/utils/url_launcher_helper.dart';
 import 'word_form_screen.dart';
 
@@ -22,6 +23,15 @@ final wordListProvider = FutureProvider<List<Word>>((ref) async {
 final searchQueryProvider = StateProvider<String>((ref) => '');
 final selectedTagFilterProvider = StateProvider<String>((ref) => 'all');
 final sortOrderProvider = StateProvider<String>((ref) => 'recent'); // recent, alpha, mastery
+
+/// 카탈로그 번호의 단일 진실 원천.
+///
+/// 필터/정렬과 무관하게 **전체 단어의 등록 순서**로 번호를 매기므로, 정렬 모드나
+/// 태그 필터를 바꿔도 같은 단어의 CAB 번호가 변하지 않는다.
+final catalogNumberProvider = FutureProvider<WordCatalogNumber>((ref) async {
+  final allWords = await ref.watch(wordListProvider.future);
+  return WordCatalogNumber.from(allWords);
+});
 
 final filteredWordsProvider = FutureProvider<List<Word>>((ref) async {
   final repo = ref.watch(wordRepositoryProvider);
@@ -66,6 +76,8 @@ class WordListScreen extends ConsumerWidget {
     final wordsAsync = ref.watch(filteredWordsProvider);
     final selectedTag = ref.watch(selectedTagFilterProvider);
     final selectedSort = ref.watch(sortOrderProvider);
+    final catalogAsync = ref.watch(catalogNumberProvider);
+    final catalog = catalogAsync.value;
 
     return CabinetPaperScaffold(
       colors: colors,
@@ -232,7 +244,10 @@ class WordListScreen extends ConsumerWidget {
                         itemCount: words.length,
                         itemBuilder: (context, index) {
                           final word = words[index];
-                          final catNo = 'CAB · #${(index + 1).toString().padLeft(4, '0')}';
+                          // 번호는 정렬/필터와 무관한 등록 순서 기준 —
+                          // 정렬 모드를 바꿔도 같은 단어의 CAB 번호는 유지된다.
+                          final catNo =
+                              catalog?.of(word) ?? WordCatalogNumber.format(index + 1);
                           final tilt = ((index % 7) - 3) * 0.15;
 
                           return CabinetCatalogCard(
@@ -509,6 +524,7 @@ class WordListScreen extends ConsumerWidget {
                                 await repo.deleteWord(word.id);
                                 ref.invalidate(filteredWordsProvider);
                                 ref.invalidate(wordListProvider);
+                                ref.invalidate(catalogNumberProvider);
                                 if (context.mounted) Navigator.pop(context);
                               },
                             ),
@@ -549,6 +565,7 @@ class WordListScreen extends ConsumerWidget {
     ).then((_) {
       ref.invalidate(filteredWordsProvider);
       ref.invalidate(wordListProvider);
+      ref.invalidate(catalogNumberProvider);
     });
   }
 }

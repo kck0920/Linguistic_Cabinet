@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/theme/cabinet_colors.dart';
 import '../../core/theme/cabinet_theme.dart';
+import '../../core/utils/word_catalog_number.dart';
 import '../../shared/widgets/cabinet_widgets.dart';
 import '../../features/words/data/models/word.dart';
 import '../home_screen.dart';
@@ -18,17 +19,20 @@ class DashboardRecentStrip extends ConsumerWidget {
     final colors = CabinetColors.fromMode(themeMode);
     final theme = CabinetTheme(colors);
 
-    // 전체 단어의 등록 순서(오래된 순) 매핑을 위한 리스트
-    final chronological = List<Word>.from(words)
-      ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+    // 카탈로그 번호의 단일 진실 원천 (등록 순서 기준)
+    final catalog = WordCatalogNumber.from(words);
 
-    // 최근 등록일(createdAt) 기준 내림차순 정렬하여 최신 4장 추출
-    // createdAt이 동일한 경우(동시 import 등) 원래 리스트의 역순을 2차 기준으로 삼아 최신 단어 우선 보장
-    final recent = List<Word>.from(words)
-      ..sort((a, b) {
-        final cmp = b.createdAt.compareTo(a.createdAt);
-        if (cmp != 0) return cmp;
-        return words.indexOf(b).compareTo(words.indexOf(a));
+    // 최근 등록일(createdAt) 기준 내림차순으로 최신 4장 추출.
+    // createdAt이 동일한 경우(동시 import 등)에는 원래 리스트의 뒤쪽 단어가
+    // 최신으로 취급한다 — 비교자가 (단어, 원래 인덱스)만 보므로 O(n log n)이다.
+    final recent = List<(Word, int)>.generate(
+      words.length,
+      (i) => (words[i], i),
+      growable: false,
+    )..sort((a, b) {
+        final byCreatedAt = b.$1.createdAt.compareTo(a.$1.createdAt);
+        if (byCreatedAt != 0) return byCreatedAt;
+        return b.$2.compareTo(a.$2);
       });
     final displayWords = recent.take(4).toList();
 
@@ -44,12 +48,9 @@ class DashboardRecentStrip extends ConsumerWidget {
             scrollDirection: Axis.horizontal,
             child: Row(
               children: List.generate(displayWords.length, (index) {
-                final w = displayWords[index];
+                final w = displayWords[index].$1;
                 final rotation = (index % 2 == 0) ? 1.2 : -1.4;
-                final catIndex = chronological.indexOf(w);
-                final catalogNo = catIndex >= 0
-                    ? 'CAB · #${(catIndex + 1).toString().padLeft(4, '0')}'
-                    : 'CAB · #${(index + 1).toString().padLeft(4, '0')}';
+                final catalogNo = catalog.of(w) ?? WordCatalogNumber.format(index + 1);
 
                 return Container(
                   width: 170,

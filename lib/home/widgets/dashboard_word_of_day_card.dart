@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/theme/cabinet_colors.dart';
 import '../../core/theme/cabinet_theme.dart';
+import '../../core/utils/word_catalog_number.dart';
 import '../../shared/widgets/cabinet_widgets.dart';
 import '../../features/words/data/models/word.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
@@ -59,6 +60,8 @@ class _DashboardWordOfDayCardState extends ConsumerState<DashboardWordOfDayCard>
     final colors = CabinetColors.fromMode(themeMode);
     final theme = CabinetTheme(colors);
     final word = widget.word;
+    // 카탈로그 번호는 정렬/필터와 무관한 등록 순서 기준 (하드코딩 금지)
+    final catalog = ref.watch(catalogNumberProvider).value;
 
     if (word == null) {
       return CabinetPaperCard(
@@ -89,6 +92,7 @@ class _DashboardWordOfDayCardState extends ConsumerState<DashboardWordOfDayCard>
                       ),
                     ).then((_) {
                       ref.invalidate(wordListProvider);
+                      ref.invalidate(catalogNumberProvider);
                       ref.invalidate(filteredWordsProvider);
                     });
                   },
@@ -118,7 +122,8 @@ class _DashboardWordOfDayCardState extends ConsumerState<DashboardWordOfDayCard>
                   ..rotateY(angle),
                 alignment: Alignment.center,
                 child: isFront
-                    ? _buildFront(word, colors, theme)
+                    ? _buildFront(word, colors, theme,
+                        catalogNo: catalog?.ofBare(word))
                     : Transform(
                         transform: Matrix4.identity()..rotateY(math.pi),
                         alignment: Alignment.center,
@@ -145,7 +150,8 @@ class _DashboardWordOfDayCardState extends ConsumerState<DashboardWordOfDayCard>
     );
   }
 
-  Widget _buildFront(Word word, CabinetColors colors, CabinetTheme theme) {
+  Widget _buildFront(Word word, CabinetColors colors, CabinetTheme theme,
+      {String? catalogNo}) {
     return CabinetPaperCard(
       colors: colors,
       padding: const EdgeInsets.all(24),
@@ -189,7 +195,7 @@ class _DashboardWordOfDayCardState extends ConsumerState<DashboardWordOfDayCard>
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                '#0001 · ${word.tags.isNotEmpty ? word.tags.first.toUpperCase() : 'GENERAL'}',
+                '${catalogNo ?? WordCatalogNumber.formatBare(1)} · ${word.tags.isNotEmpty ? word.tags.first.toUpperCase() : 'GENERAL'}',
                 style: theme.catalogNo,
               ),
               CabinetBrutalButton(

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/theme/cabinet_colors.dart';
 import '../core/theme/cabinet_theme.dart';
+import '../core/utils/word_of_day_picker.dart';
 import '../shared/widgets/cabinet_widgets.dart';
 import '../features/words/presentation/screens/word_list_screen.dart';
 import '../features/review/presentation/screens/review_screen.dart';
@@ -133,10 +134,11 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
     final totalReviews = statsData['totalReviews'] ?? 0;
 
     final now = DateTime.now();
-    // 30분 단위 시드 (30분마다 자동 단어 변경)
-    final slot30Min = (now.millisecondsSinceEpoch / (1000 * 60 * 30)).floor();
-    final wordOfDay =
-        words.isNotEmpty ? words[slot30Min % words.length] : null;
+    // 30분 단위 시드 (30분마다 자동 단어 변경).
+    // 선택 기준은 DB rowid 순서가 아니라 **등록 순서**(createdAt 오름차순)라서
+    // 단어 추가/삭제/백업 복원이 있어도 같은 슬롯에서는 같은 단어가 나온다.
+    final slot30Min = WordOfDayPicker.slotOf(now);
+    final wordOfDay = WordOfDayPicker.pick(words, slot30Min);
     final totalCount = words.length;
     // 숙달 수는 공용 프로바이더(getMasteredCount)의 단일 진실 원천을 사용한다.
     final masteredAsync = ref.watch(masteredCountProvider);
