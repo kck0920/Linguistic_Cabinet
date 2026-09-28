@@ -11,6 +11,8 @@ dependencies:
   flutter:
     sdk: flutter
 
+  # iOS/macOS 텍스트 선택 컨텍스트 메뉴가 Flutter SDK cupertino 위젯을 통해
+  # CupertinoIcons 폰트를 참조한다. 없으면 해당 아이콘이 빈 박스로 렌더된다.
   cupertino_icons: ^1.0.8
   google_fonts: ^6.1.0
   
@@ -31,8 +33,6 @@ dependencies:
   # File Operations
   share_plus: ^10.0.0
   file_picker: ^10.3.10
-  # Image processing (resize/compress)
-  image: ^4.0.0
   # Zip archive handling for export/import
   archive: ^3.3.7
   
@@ -62,9 +62,6 @@ dev_dependencies:
 
   flutter_lints: ^6.0.0
   
-  # Testing
-  mockito: ^5.4.0
-  build_runner: ^2.4.0
   # 테스트에서 path_provider 경로를 임시 디렉토리로 대체하기 위한 플랫폼 인터페이스
   path_provider_platform_interface: ^2.1.3
 
