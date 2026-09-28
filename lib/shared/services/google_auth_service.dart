@@ -141,8 +141,24 @@ class GoogleAuthService {
     );
   }
 
+  /// 진행 중인 인터랙티브 로그인 Future. 중복 실행을 막기 위해 공유한다.
+  Future<GoogleAuthUser?>? _signInInFlight;
+
+  /// 로그인 버튼이 연속으로 눌리거나(더블탭) 여러 UI가 동시에 호출해도
+  /// Google 팝업이 두 번 열리지 않도록 진행 중인 호출에 결과를 공유한다.
+  Future<GoogleAuthUser?> signIn() {
+    final inFlight = _signInInFlight;
+    if (inFlight != null) return inFlight;
+
+    final future = _signInOnce().whenComplete(() {
+      _signInInFlight = null;
+    });
+    _signInInFlight = future;
+    return future;
+  }
+
   /// 구글 로그인 시도 (Authorization Code Flow 및 GIS Token Client 2중 지원)
-  Future<GoogleAuthUser?> signIn() async {
+  Future<GoogleAuthUser?> _signInOnce() async {
     try {
       if (_isDesktopAuth) {
         final desktopAcc = await _desktopAuth.signIn();
@@ -208,12 +224,16 @@ class GoogleAuthService {
           }
         }
 
-        // 사용자가 취소한 것이 아니라 서버리스 exchangeAuthCode가 기술적으로 실패한 경우에만 GIS Token Client 폴백 시도
+        // 사용자가 취소한 것이 아니라 서버리스 exchangeAuthCode가 기술적으로
+        // 실패한 경우. 여기서 두 번째 인터랙티브 프롬프트('select_account')를
+        // 띄우면 사용자는 "로그인이 두 번 된다"고 체감한다. 첫 팝업에서 이미
+        // 인증·동의를 끝냈으므로, 강제 재동의 대신 **무팝업 사일런트** 토큰
+        // 요청만 시도하고, 그것도 실패하면 조용히 종료한다.
         if (code != null && code.isNotEmpty) {
           final tokenResult = await GoogleTokenRefresher.requestAccessToken(
             clientId: customClientId ?? '',
             scopes: _scopes,
-            prompt: 'select_account',
+            prompt: '', // 사일런트: 기존 브라우저 구글 세션으로 무팝업 발급
           );
 
           if (tokenResult != null && tokenResult.accessToken.isNotEmpty) {
@@ -232,6 +252,8 @@ class GoogleAuthService {
               displayName: user.displayName,
               photoUrl: user.photoUrl,
               accessToken: tokenResult.accessToken,
+              // GIS Token Client는 refresh token을 주지 않는다. 기존 토큰이
+              // 있으면 보존하고, 없으면 백그라운드 갱신이 불가능해진다.
               encryptedRefreshToken: existingSession?.encryptedRefreshToken,
               expiresAt: tokenResult.expiresAt,
             ));
@@ -239,6 +261,11 @@ class GoogleAuthService {
             _userController.add(user);
             return user;
           }
+
+          debugPrint(
+            'Google Sign-In: server code exchange and silent token request '
+            'both failed. Skipping interactive retry to avoid a second prompt.',
+          );
         }
 
         return null;
@@ -285,8 +312,29 @@ class GoogleAuthService {
     }
   }
 
+  /// 진행 중인 사일런트 복원 Future. 동시 호출은 하나로 합쳐져 공유된다.
+  Future<GoogleAuthUser?>? _silentSignInInFlight;
+
   /// 기존 로그인 세션 조용히 복원 (팝업/네트워크 로그인 요청 절대 금지)
-  Future<GoogleAuthUser?> signInSilently() async {
+  ///
+  /// 앱 시작(main) · 프로바이더 생성(GoogleUserNotifier.init) · 설정 탭 initState
+  /// 세 곳이 이 메서드를 호출하므로 거의 동시에 3회 겹쳐 들어온다. 중복 실행하면
+  /// 세션 로드와 만료 시 백그라운드 토큰 갱신이 그만큼 반복된다(팝업은 뜨지 않는다).
+  ///
+  /// 그래서 **진행 중인 호출에 결과를 공유**한다. 완료되면 해제되어 이후의
+  /// 명시적 재조회는 정상적으로 다시 실행된다.
+  Future<GoogleAuthUser?> signInSilently() {
+    final inFlight = _silentSignInInFlight;
+    if (inFlight != null) return inFlight;
+
+    final future = _restoreSessionOnce().whenComplete(() {
+      _silentSignInInFlight = null;
+    });
+    _silentSignInInFlight = future;
+    return future;
+  }
+
+  Future<GoogleAuthUser?> _restoreSessionOnce() async {
     try {
       if (_isDesktopAuth) {
         final desktopAcc = await _desktopAuth.loadSavedAccount();

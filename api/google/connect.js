@@ -25,14 +25,23 @@ module.exports = async (req, res) => {
     if (!code) {
       return res.status(400).json({ error: 'Authorization code is required' });
     }
+    if (!redirect_uri) {
+      return res.status(400).json({ error: 'redirect_uri is required' });
+    }
 
     const params = new URLSearchParams({
       code,
       client_id: CLIENT_ID,
-      client_secret: CLIENT_SECRET,
-      redirect_uri: redirect_uri || 'postmessage', // GIS Popup mode는 'postmessage', Redirect mode는 클라이언트 origin URI
+      redirect_uri: redirect_uri, // GIS 팝업 모드 = 호출 페이지의 origin (경로 제외)
       grant_type: 'authorization_code',
     });
+
+    // client_secret은 'Web application' 타입 클라이언트에서는 필요 없다.
+    // 빈 문자열로 보내면 Google이 invalid_client로 거부하므로, 값이 있을 때만
+    // 파라미터를 넣는다.
+    if (CLIENT_SECRET) {
+      params.set('client_secret', CLIENT_SECRET);
+    }
 
     const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST',

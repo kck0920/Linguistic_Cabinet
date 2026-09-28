@@ -92,9 +92,13 @@ class GoogleTokenRefresher {
       if (redirectUri != null && redirectUri.isNotEmpty) {
         bodyMap['redirect_uri'] = redirectUri;
       } else {
-        final origin = web.window.location.origin;
-        final pathname = web.window.location.pathname;
-        bodyMap['redirect_uri'] = origin + pathname;
+        // GIS 팝업 모드(initCodeClient, ux_mode: 'popup')로 발급된 코드를
+        // 교환할 때의 redirect_uri는 **호출 페이지의 origin**이다
+        // (Google 공식 문서: "the origin: https://www.example.com is the value
+        // of redirect_url"). pathname을 붙이면 origin과 불일치해
+        // redirect_uri_mismatch로 교환이 실패한다.
+        // ref: developers.google.com/identity/oauth2/web/guides/use-code-model
+        bodyMap['redirect_uri'] = web.window.location.origin;
       }
 
       final response = await web.window.fetch(
