@@ -14,6 +14,18 @@ import '../../../review/data/models/review_card.dart';
 import '../../../review/data/repositories/review_repository.dart';
 import '../../../review/presentation/screens/review_screen.dart';
 
+/// 백업 JSON의 값을 안전하게 읽기 위한 헬퍼.
+///
+/// 백업 파일은 사람이 편집했을 수 있고 구버전 형식일 수도 있으므로,
+/// 잘못된 타입·형식이 들어와도 **해당 항목만 건너뛰고** 나머지는 정상 처리한다.
+String? _asString(dynamic value) => value is String ? value : null;
+
+DateTime? _asDateTime(dynamic value) {
+  final raw = _asString(value);
+  if (raw == null || raw.isEmpty) return null;
+  return DateTime.tryParse(raw);
+}
+
 class BackupResult {
   final int importedCount;
   final int updatedCount;
@@ -240,64 +252,71 @@ class BackupService {
     final List<Word> wordsToUpdate = [];
 
     for (final item in decoded) {
-      if (item is Map<String, dynamic>) {
-        final english = item['english'] as String?;
-        final korean = item['korean'] as String?;
+      if (item is! Map<String, dynamic>) continue;
 
-        if (english == null || english.isEmpty || korean == null || korean.isEmpty) {
-          continue;
-        }
+      // 타입이 예상과 다른 항목은 방어적으로 읽는다 (raw cast 크래시 방지).
+      final english = _asString(item['english']);
+      final korean = _asString(item['korean']);
 
-        final key = english.trim().toLowerCase();
-        final existing = existingByEnglish[key];
+      if (english == null || english.isEmpty || korean == null || korean.isEmpty) {
+        continue;
+      }
 
-        // Resolve image_path from ZIP
-        String? resolvedImagePath;
-        final zipImagePath = item['image_path'] as String?;
+      final key = english.trim().toLowerCase();
+      final existing = existingByEnglish[key];
 
-        if (zipImagePath != null && zipImagePath.isNotEmpty) {
-          final imageFile = archive.findFile(zipImagePath);
+      // Resolve image_path from ZIP
+      String? resolvedImagePath;
+      final zipImagePath = _asString(item['image_path']);
 
-          if (imageFile != null && imageFile.content is List<int>) {
-            final imageBytes = Uint8List.fromList(imageFile.content as List<int>);
+      if (zipImagePath != null && zipImagePath.isNotEmpty) {
+        final imageFile = archive.findFile(zipImagePath);
 
-            if (kIsWeb) {
-              // Web: store as base64
-              resolvedImagePath = base64Encode(imageBytes);
-            } else {
-              // Mobile/Desktop: write to images directory
-              final filename = '${const Uuid().v4()}.jpg';
-              final destPath = '$imagesDirPath/$filename';
-              final destFile = File(destPath);
-              await destFile.writeAsBytes(imageBytes);
-              resolvedImagePath = destPath;
-            }
+        if (imageFile != null && imageFile.content is List<int>) {
+          final imageBytes = Uint8List.fromList(imageFile.content as List<int>);
+
+          if (kIsWeb) {
+            // Web: store as base64
+            resolvedImagePath = base64Encode(imageBytes);
+          } else {
+            // Mobile/Desktop: write to images directory
+            final filename = '${const Uuid().v4()}.jpg';
+            final destPath = '$imagesDirPath/$filename';
+            final destFile = File(destPath);
+            await destFile.writeAsBytes(imageBytes);
+            resolvedImagePath = destPath;
           }
         }
+      }
 
-        final word = Word(
-          id: existing?.id ?? item['id'] as String?,
-          english: english,
-          korean: korean,
-          exampleSentence: item['example_sentence'] as String?,
-          pronunciation: item['pronunciation'] as String?,
-          tags: item['tags'] != null
-              ? (item['tags'] as String).split(',').where((t) => t.isNotEmpty).toList()
-              : null,
-          difficulty: item['difficulty'] as int? ?? 3,
-          memo: item['memo'] as String?,
-          imagePath: resolvedImagePath,
-          createdAt: item['created_at'] != null ? DateTime.parse(item['created_at'] as String) : null,
-          updatedAt: DateTime.now(),
-        );
+      // 날짜 파싱은 try/catch 대신 tryParse — 깨진 값은 null로 무시된다.
+      final backupCreatedAt = _asDateTime(item['created_at']);
+      final backupUpdatedAt = _asDateTime(item['updated_at']);
 
-        if (existing != null) {
-          wordsToUpdate.add(word);
-          updatedCount++;
-        } else {
-          wordsToInsert.add(word);
-          importedCount++;
-        }
+      // 등록일 보존: 백업에 값이 없으면 기존 단어의 등록일을 그대로 쓴다.
+      // (기존 값을 잃으면 카탈로그 번호까지 틀어진다)
+      final createdAt = backupCreatedAt ?? existing?.createdAt;
+
+      final word = Word(
+        id: existing?.id ?? _asString(item['id']),
+        english: english,
+        korean: korean,
+        exampleSentence: _asString(item['example_sentence']),
+        pronunciation: _asString(item['pronunciation']),
+        tags: _asString(item['tags'])?.split(',').where((t) => t.isNotEmpty).toList(),
+        difficulty: item['difficulty'] is int ? item['difficulty'] as int : 3,
+        memo: _asString(item['memo']),
+        imagePath: resolvedImagePath,
+        createdAt: createdAt,
+        updatedAt: backupUpdatedAt ?? DateTime.now(),
+      );
+
+      if (existing != null) {
+        wordsToUpdate.add(word);
+        updatedCount++;
+      } else {
+        wordsToInsert.add(word);
+        importedCount++;
       }
     }
 
