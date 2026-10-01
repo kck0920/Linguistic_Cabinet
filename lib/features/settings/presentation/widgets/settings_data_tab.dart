@@ -349,6 +349,12 @@ class _SettingsDataTabState extends ConsumerState<SettingsDataTab> {
             icon: Icons.cloud_queue,
             fullWidth: true,
             onPressed: () async {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('웹 브라우저가 열립니다. Google 계정으로 로그인을 완료해 주세요.'),
+                  duration: Duration(seconds: 4),
+                ),
+              );
               try {
                 final account = await ref.read(googleUserProvider.notifier).signIn();
                 if (account != null && mounted) {
@@ -361,7 +367,9 @@ class _SettingsDataTabState extends ConsumerState<SettingsDataTab> {
                 if (mounted) {
                   final errStr = e.toString();
                   String errMsg = 'Google 로그인 실패: $e';
-                  if (errStr.contains('popup_failed_to_open') || errStr.contains('popup_closed')) {
+                  if (errStr.contains('redirect_uri_mismatch')) {
+                    errMsg = 'Google OAuth 설정 오류(redirect_uri_mismatch): Google Console에서 "데스크톱 앱" 유형으로 클라이언트를 생성하거나 승인된 리디렉션 URI를 추가해야 합니다.';
+                  } else if (errStr.contains('popup_failed_to_open') || errStr.contains('popup_closed')) {
                     errMsg = '아이폰 Safari 팝업 차단으로 창이 열리지 않았습니다. iOS 설정 > Safari > [팝업 차단]을 해제 후 다시 눌러주세요.';
                   } else if (errStr.contains('appClientId != null') || errStr.contains('ClientId not set')) {
                     errMsg = 'Google OAuth Client ID 설정이 필요합니다. (Google Cloud Console 발급 필요)';
@@ -369,7 +377,7 @@ class _SettingsDataTabState extends ConsumerState<SettingsDataTab> {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
                       content: Text(errMsg),
-                      duration: const Duration(seconds: 5),
+                      duration: const Duration(seconds: 6),
                     ),
                   );
                 }

@@ -230,24 +230,21 @@ class DesktopGoogleAuthService {
       final request = await server.first.timeout(const Duration(minutes: 3));
       final code = request.uri.queryParameters['code'];
 
-      // 응답 웹페이지 전송
-      request.response
-        ..statusCode = 200
-        ..headers.contentType = ContentType.html
-        ..write('''
-          <!DOCTYPE html>
-          <html>
-          <head><meta charset="utf-8"><title>VocaTree 로그인 완료</title></head>
-          <body style="font-family: sans-serif; text-align: center; padding-top: 50px;">
-            <h2>🎉 VocaTree (Linguistic Cabinet) 구글 로그인 완료!</h2>
-            <p>이 브라우저 창을 닫고 앱으로 돌아가셔도 좋습니다.</p>
-            <script>setTimeout(function() { window.close(); }, 2000);</script>
-          </body>
-          </html>
-        ''');
-      await request.response.close();
-
       if (code == null) {
+        request.response
+          ..statusCode = 400
+          ..headers.contentType = ContentType.html
+          ..write('''
+            <!DOCTYPE html>
+            <html>
+            <head><meta charset="utf-8"><title>VocaTree 로그인 실패</title></head>
+            <body style="font-family: sans-serif; text-align: center; padding-top: 50px;">
+              <h2>❌ Google 로그인 실패</h2>
+              <p>인증 코드를 전달받지 못했습니다.</p>
+            </body>
+            </html>
+          ''');
+        await request.response.close();
         throw Exception('No auth code received from Google');
       }
 
@@ -264,8 +261,39 @@ class DesktopGoogleAuthService {
       );
 
       if (tokenResponse.statusCode != 200) {
+        request.response
+          ..statusCode = 400
+          ..headers.contentType = ContentType.html
+          ..write('''
+            <!DOCTYPE html>
+            <html>
+            <head><meta charset="utf-8"><title>VocaTree 로그인 실패</title></head>
+            <body style="font-family: sans-serif; text-align: center; padding-top: 50px;">
+              <h2>❌ 토큰 발급 실패</h2>
+              <p>${tokenResponse.body}</p>
+            </body>
+            </html>
+          ''');
+        await request.response.close();
         throw Exception('Failed to get access token: ${tokenResponse.body}');
       }
+
+      // 토큰 교환 성공 시 브라우저에 성공 응답 전송
+      request.response
+        ..statusCode = 200
+        ..headers.contentType = ContentType.html
+        ..write('''
+          <!DOCTYPE html>
+          <html>
+          <head><meta charset="utf-8"><title>VocaTree 로그인 완료</title></head>
+          <body style="font-family: sans-serif; text-align: center; padding-top: 50px;">
+            <h2>🎉 Linguistic Cabinet 구글 로그인 완료!</h2>
+            <p>이 브라우저 창을 닫고 앱으로 돌아가셔도 좋습니다.</p>
+            <script>setTimeout(function() { window.close(); }, 2000);</script>
+          </body>
+          </html>
+        ''');
+      await request.response.close();
 
       final tokenData = jsonDecode(tokenResponse.body);
       final accessToken = tokenData['access_token'] as String;
