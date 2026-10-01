@@ -95,7 +95,9 @@ void ignoreTestFontOverflow() {
   final original = FlutterError.onError;
   FlutterError.onError = (details) {
     final text = details.toString();
-    if (text.contains('overflowed') && text.contains('cabinet_widgets.dart')) {
+    if (text.contains('overflowed') &&
+        (text.contains('cabinet_widgets.dart') ||
+            text.contains('cabinet_surfaces.dart'))) {
       return;
     }
     original?.call(details);

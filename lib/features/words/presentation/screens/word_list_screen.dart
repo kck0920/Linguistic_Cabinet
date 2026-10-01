@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -356,16 +357,27 @@ class WordListScreen extends ConsumerWidget {
     showDialog(
       context: context,
       builder: (context) {
+        final screenWidth = MediaQuery.of(context).size.width;
+
+        // 모바일 및 데스크탑 반응형 팝업창 크기 계산 (REVIEW 메뉴 플래시카드와 동일한 규칙):
+        // 데스크탑(폭 > 800)에서는 화면 크기에 맞춰 최대 960px까지 시원하게 확장
+        final double maxAllowedWidth = screenWidth > 800
+            ? math.min(screenWidth * 0.75, 960.0)
+            : math.min(screenWidth - 32.0, 580.0);
+        final double modalWidth = math.max(300.0, maxAllowedWidth);
+
         return Dialog(
           backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 580),
+            constraints: BoxConstraints(maxWidth: modalWidth),
             child: SingleChildScrollView(
               child: Stack(
                 clipBehavior: Clip.none,
                 children: [
                   CabinetPaperCard(
                     colors: colors,
+                    width: modalWidth,
                     padding: const EdgeInsets.all(28),
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
@@ -485,11 +497,18 @@ class WordListScreen extends ConsumerWidget {
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
-                                  CabinetStamp(
-                                    text: 'COLLECTED MOMENT (MARKDOWN)',
-                                    color: colors.accent,
-                                    fontSize: 9,
+                                  Flexible(
+                                    child: FittedBox(
+                                      fit: BoxFit.scaleDown,
+                                      alignment: Alignment.centerLeft,
+                                      child: CabinetStamp(
+                                        text: 'COLLECTED MOMENT (MARKDOWN)',
+                                        color: colors.accent,
+                                        fontSize: 9,
+                                      ),
+                                    ),
                                   ),
+                                  const SizedBox(width: 8),
                                   Text(
                                     word.createdAt.toString().substring(0, 10),
                                     style: theme.catalogNo,
