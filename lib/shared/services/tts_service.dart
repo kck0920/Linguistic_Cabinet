@@ -1,29 +1,14 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_tts/flutter_tts.dart';
 import '../../features/review/data/repositories/review_repository.dart';
 import '../../features/review/presentation/screens/review_screen.dart';
 import '../../core/theme/cabinet_colors.dart';
 import '../../core/theme/cabinet_theme.dart';
+import 'tts_engine_base.dart';
+import 'tts_engine.dart';
 
-/// 발음 음성 성별 (여성 / 남성)
-enum TtsVoiceGender {
-  female('여성', 'Female', '♀', 1.15),
-  male('남성', 'Male', '♂', 0.85);
-
-  final String labelKo;
-  final String labelEn;
-  final String symbol;
-  final double defaultPitch;
-  const TtsVoiceGender(this.labelKo, this.labelEn, this.symbol, this.defaultPitch);
-
-  static TtsVoiceGender fromString(String? val) {
-    if (val == 'male') return TtsVoiceGender.male;
-    return TtsVoiceGender.female;
-  }
-}
+export 'tts_engine_base.dart' show TtsVoiceGender, BaseTtsEngine;
 
 /// 기본 음성 성별 설정 관리 Provider
 final ttsVoiceGenderProvider =
@@ -59,7 +44,8 @@ class TtsVoiceGenderNotifier extends StateNotifier<TtsVoiceGender> {
 
 /// TTS 발음 재생 서비스 Provider
 final ttsServiceProvider = Provider<TtsService>((ref) {
-  final service = TtsService();
+  final engine = createTtsEngine();
+  final service = TtsService(engine: engine);
   ref.onDispose(() {
     service.dispose();
   });
@@ -67,66 +53,36 @@ final ttsServiceProvider = Provider<TtsService>((ref) {
 });
 
 class TtsService {
-  final FlutterTts _tts;
-  bool _isInitialized = false;
+  final BaseTtsEngine _engine;
   bool _isPlaying = false;
   String? _currentlySpeakingWord;
   TtsVoiceGender? _currentSpeakingGender;
-  List<Map<String, String>> _availableVoices = [];
 
-  TtsService({FlutterTts? tts}) : _tts = tts ?? FlutterTts();
+  TtsService({BaseTtsEngine? engine})
+      : _engine = engine ?? createTtsEngine() {
+    _engine.setHandlers(
+      onStart: () {
+        _isPlaying = true;
+      },
+      onComplete: () {
+        _isPlaying = false;
+        _currentlySpeakingWord = null;
+        _currentSpeakingGender = null;
+      },
+      onError: (msg) {
+        _isPlaying = false;
+        _currentlySpeakingWord = null;
+        _currentSpeakingGender = null;
+      },
+    );
+  }
 
   bool get isPlaying => _isPlaying;
   String? get currentlySpeakingWord => _currentlySpeakingWord;
   TtsVoiceGender? get currentSpeakingGender => _currentSpeakingGender;
 
   Future<void> init() async {
-    if (_isInitialized) return;
-    try {
-      await _tts.setLanguage("en-US");
-      // 웹에서는 0.9가 자연스럽고, 모바일/데스크톱에서는 0.48이 학습용 적정 속도
-      await _tts.setSpeechRate(kIsWeb ? 0.9 : 0.48);
-      await _tts.setVolume(1.0);
-
-      _tts.setStartHandler(() {
-        _isPlaying = true;
-      });
-      _tts.setCompletionHandler(() {
-        _isPlaying = false;
-        _currentlySpeakingWord = null;
-        _currentSpeakingGender = null;
-      });
-      _tts.setCancelHandler(() {
-        _isPlaying = false;
-        _currentlySpeakingWord = null;
-        _currentSpeakingGender = null;
-      });
-      _tts.setErrorHandler((msg) {
-        _isPlaying = false;
-        _currentlySpeakingWord = null;
-        _currentSpeakingGender = null;
-        debugPrint('TTS Error: $msg');
-      });
-
-      await _loadVoices();
-      _isInitialized = true;
-    } catch (e) {
-      debugPrint('TTS init warning (plugin might be unavailable in tests): $e');
-    }
-  }
-
-  Future<void> _loadVoices() async {
-    try {
-      final voices = await _tts.getVoices;
-      if (voices is List) {
-        _availableVoices = voices
-            .whereType<Map>()
-            .map((v) => v.map((key, value) => MapEntry(key.toString(), value.toString())))
-            .toList();
-      }
-    } catch (e) {
-      debugPrint('TTS getVoices error: $e');
-    }
+    await _engine.init();
   }
 
   /// 단어 텍스트를 지정한 성별(남성/여성) 음성으로 발음 재생
@@ -135,27 +91,12 @@ class TtsService {
     if (cleanText.isEmpty) return;
 
     try {
-      await init();
-      await stop();
-
-      // 1. 성별에 최적화된 보이스 매칭
-      final targetVoice = _findVoiceForGender(gender);
-      if (targetVoice != null && targetVoice['name'] != null) {
-        await _tts.setVoice({
-          'name': targetVoice['name']!,
-          'locale': targetVoice['locale'] ?? 'en-US',
-        });
-      }
-
-      // 2. 피치(음조)를 결합하여 OS/브라우저 엔진에 관계없이 뚜렷한 남/여 톤 보장
-      await _tts.setPitch(gender.defaultPitch);
-
       _currentlySpeakingWord = cleanText;
       _currentSpeakingGender = gender;
       _isPlaying = true;
-      await _tts.speak(cleanText);
+      await _engine.speak(cleanText, gender);
     } catch (e) {
-      debugPrint('TTS speak failed: $e');
+      debugPrint('TTS speak error: $e');
       _isPlaying = false;
       _currentlySpeakingWord = null;
       _currentSpeakingGender = null;
@@ -164,52 +105,11 @@ class TtsService {
 
   Future<void> stop() async {
     try {
-      await _tts.stop();
+      await _engine.stop();
     } catch (_) {}
     _isPlaying = false;
     _currentlySpeakingWord = null;
     _currentSpeakingGender = null;
-  }
-
-  Map<String, String>? _findVoiceForGender(TtsVoiceGender gender) {
-    if (_availableVoices.isEmpty) return null;
-
-    final englishVoices = _availableVoices.where((v) {
-      final loc = (v['locale'] ?? v['lang'] ?? '').toLowerCase();
-      return loc.startsWith('en');
-    }).toList();
-
-    final candidates = englishVoices.isNotEmpty ? englishVoices : _availableVoices;
-
-    if (gender == TtsVoiceGender.male) {
-      const maleKeywords = [
-        'male', 'david', 'alex', 'guy', 'james', 'george', 'daniel', 'fred',
-        'brian', 'tom', 'mark', 'aaron', 'standard-b', 'standard-d', 'wavenet-b',
-        'wavenet-d', 'neural2-d', 'neural2-j'
-      ];
-      for (final v in candidates) {
-        final name = (v['name'] ?? '').toLowerCase();
-        final g = (v['gender'] ?? '').toLowerCase();
-        if (g == 'male' || maleKeywords.any((k) => name.contains(k))) {
-          return v;
-        }
-      }
-    } else {
-      const femaleKeywords = [
-        'female', 'samantha', 'zira', 'jenny', 'victoria', 'karen', 'susan',
-        'allison', 'joanna', 'kendra', 'standard-a', 'standard-c', 'standard-e',
-        'wavenet-a', 'wavenet-c', 'neural2-c', 'neural2-f'
-      ];
-      for (final v in candidates) {
-        final name = (v['name'] ?? '').toLowerCase();
-        final g = (v['gender'] ?? '').toLowerCase();
-        if (g == 'female' || femaleKeywords.any((k) => name.contains(k))) {
-          return v;
-        }
-      }
-    }
-
-    return candidates.isNotEmpty ? candidates.first : null;
   }
 
   void dispose() {
