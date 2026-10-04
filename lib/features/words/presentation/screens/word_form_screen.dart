@@ -14,6 +14,7 @@ import 'word_list_screen.dart';
 import '../../../../core/theme/cabinet_colors.dart';
 import '../../../../core/theme/cabinet_theme.dart';
 import '../../../../shared/services/google_drive_sync_service.dart';
+import '../../../../shared/services/tts_service.dart';
 import '../../../../shared/widgets/cabinet_widgets.dart';
 import '../../../../core/utils/url_launcher_helper.dart';
 
@@ -46,6 +47,7 @@ class _WordFormScreenState extends ConsumerState<WordFormScreen> {
   void initState() {
     super.initState();
     _englishController = TextEditingController(text: widget.word?.english ?? '');
+    _englishController.addListener(_onEnglishChanged);
     _koreanController = TextEditingController(text: widget.word?.korean ?? '');
     _exampleController = TextEditingController(text: widget.word?.exampleSentence ?? '');
     _pronunciationController = TextEditingController(text: widget.word?.pronunciation ?? '');
@@ -80,8 +82,13 @@ class _WordFormScreenState extends ConsumerState<WordFormScreen> {
     }
   }
 
+  void _onEnglishChanged() {
+    if (mounted) setState(() {});
+  }
+
   @override
   void dispose() {
+    _englishController.removeListener(_onEnglishChanged);
     _englishController.dispose();
     _koreanController.dispose();
     _exampleController.dispose();
@@ -230,6 +237,22 @@ class _WordFormScreenState extends ConsumerState<WordFormScreen> {
                           style: theme.wordTitle.copyWith(fontSize: 24),
                           decoration: _buildInputDecoration('e.g. serendipity', colors, theme),
                           validator: (val) => val == null || val.isEmpty ? '단어를 입력해 주세요.' : null,
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Text(
+                              'PRONUNCIATION · 발음 듣기:',
+                              style: theme.labelMono.copyWith(fontSize: 10, color: colors.ink3),
+                            ),
+                            const SizedBox(width: 8),
+                            CabinetPronounceButtons(
+                              word: _englishController.text,
+                              colors: colors,
+                              theme: theme,
+                              compact: true,
+                            ),
+                          ],
                         ),
                         const SizedBox(height: 16),
 
@@ -575,7 +598,19 @@ class _WordFormScreenState extends ConsumerState<WordFormScreen> {
     unawaited(ref.read(achievementEvaluatorProvider).evaluateNow());
     GoogleDriveSyncService().scheduleDebouncedSync();
 
-    if (mounted) Navigator.pop(context);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            widget.word != null
+                ? '단어 카드가 수정되었습니다.'
+                : '새 단어가 수집되었습니다! 남성/여성 발음을 언제든 들을 수 있습니다.',
+          ),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+      Navigator.pop(context);
+    }
   }
 
   Future<void> _deleteWord() async {

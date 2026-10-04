@@ -9,6 +9,7 @@ import '../../data/models/word.dart';
 import '../../data/repositories/word_repository.dart';
 import '../../../../core/theme/cabinet_colors.dart';
 import '../../../../core/theme/cabinet_theme.dart';
+import '../../../../shared/services/tts_service.dart';
 import '../../../../shared/widgets/cabinet_widgets.dart';
 import '../../../../core/utils/word_catalog_number.dart';
 import '../../../../core/utils/url_launcher_helper.dart';
@@ -424,13 +425,25 @@ class WordListScreen extends ConsumerWidget {
                           ],
                         ),
 
-                        if (word.pronunciation != null && word.pronunciation!.isNotEmpty) ...[
-                          const SizedBox(height: 4),
-                          Text(
-                            word.pronunciation!,
-                            style: theme.labelMono.copyWith(color: colors.ink3, height: 1.4),
-                          ),
-                        ],
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 12,
+                          runSpacing: 8,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            if (word.pronunciation != null && word.pronunciation!.isNotEmpty)
+                              Text(
+                                word.pronunciation!,
+                                style: theme.labelMono.copyWith(color: colors.ink3, height: 1.4),
+                              ),
+                            CabinetPronounceButtons(
+                              word: word.english,
+                              colors: colors,
+                              theme: theme,
+                              compact: true,
+                            ),
+                          ],
+                        ),
                         const SizedBox(height: 14),
 
                         // Korean Meaning

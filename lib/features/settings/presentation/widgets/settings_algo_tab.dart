@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/cabinet_colors.dart';
 import '../../../../core/theme/cabinet_theme.dart';
+import '../../../../shared/services/tts_service.dart';
 import '../../../../shared/widgets/cabinet_widgets.dart';
 import '../../../review/data/models/review_card.dart';
 import '../../../review/data/repositories/review_repository.dart';
@@ -200,6 +201,8 @@ class SettingsAlgoTab extends ConsumerWidget {
         }),
         const SizedBox(height: 8),
         _buildAutoDifficultyToggle(ref, colors, theme),
+        const SizedBox(height: 16),
+        _buildPronunciationVoiceCard(ref, colors, theme),
       ],
     );
   }
@@ -212,20 +215,153 @@ class SettingsAlgoTab extends ConsumerWidget {
     return CabinetPaperCard(
       colors: colors,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      child: SwitchListTile(
-        contentPadding: EdgeInsets.zero,
-        title: Text('복습 결과 난이도 자동 반영', style: theme.wordTitle.copyWith(fontSize: 16)),
-        subtitle: Text(
-          '정답 시 난이도 1 하락, 오답 시 1 상승 (1~5 범위). MASTERED(난이도 ≤ 2) 집계에 자동 반영됩니다.',
-          style: theme.bodySans.copyWith(color: colors.ink3),
+      child: Material(
+        type: MaterialType.transparency,
+        child: SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: Text('복습 결과 난이도 자동 반영', style: theme.wordTitle.copyWith(fontSize: 16)),
+          subtitle: Text(
+            '정답 시 난이도 1 하락, 오답 시 1 상승 (1~5 범위). MASTERED(난이도 ≤ 2) 집계에 자동 반영됩니다.',
+            style: theme.bodySans.copyWith(color: colors.ink3),
+          ),
+          value: enabled,
+          activeThumbColor: colors.accent,
+          onChanged: (val) async {
+            final repo = ref.read(reviewRepositoryProvider);
+            await repo.setSetting(ReviewRepository.autoDifficultySettingKey, val ? 'true' : 'false');
+            ref.invalidate(autoDifficultyEnabledProvider);
+          },
         ),
-        value: enabled,
-        activeThumbColor: colors.accent,
-        onChanged: (val) async {
-          final repo = ref.read(reviewRepositoryProvider);
-          await repo.setSetting(ReviewRepository.autoDifficultySettingKey, val ? 'true' : 'false');
-          ref.invalidate(autoDifficultyEnabledProvider);
-        },
+      ),
+    );
+  }
+
+  /// 발음 음성 설정 카드 (남성/여성 기본 음성 선택 및 미리듣기)
+  Widget _buildPronunciationVoiceCard(
+    WidgetRef ref,
+    CabinetColors colors,
+    CabinetTheme theme,
+  ) {
+    final currentGender = ref.watch(ttsVoiceGenderProvider);
+
+    return CabinetPaperCard(
+      colors: colors,
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('PRONUNCIATION VOICE', style: theme.labelMono),
+              CabinetStamp(
+                text: currentGender.labelEn.toUpperCase(),
+                color: colors.accent,
+                fontSize: 9,
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            '발음 음성 성별 설정',
+            style: theme.wordTitle.copyWith(fontSize: 18),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            '단어를 추가하거나 복습할 때 원하는 성별의 음성으로 발음을 들을 수 있습니다.',
+            style: theme.bodySans.copyWith(color: colors.ink3),
+          ),
+          const SizedBox(height: 16),
+
+          // 성별 선택 버튼 행
+          Row(
+            children: TtsVoiceGender.values.map((gender) {
+              final isSelected = currentGender == gender;
+              return Expanded(
+                child: Padding(
+                  padding: EdgeInsets.only(
+                    right: gender == TtsVoiceGender.female ? 6 : 0,
+                    left: gender == TtsVoiceGender.male ? 6 : 0,
+                  ),
+                  child: InkWell(
+                    onTap: () {
+                      ref.read(ttsVoiceGenderProvider.notifier).setGender(gender);
+                    },
+                    borderRadius: BorderRadius.circular(3),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+                      decoration: BoxDecoration(
+                        color: isSelected
+                            ? colors.accent.withValues(alpha: 0.12)
+                            : colors.paper3,
+                        borderRadius: BorderRadius.circular(3),
+                        border: Border.all(
+                          color: isSelected ? colors.accent : colors.inkLineStrong,
+                          width: isSelected ? 1.5 : 1.0,
+                        ),
+                      ),
+                      child: Column(
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                gender.symbol,
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: isSelected ? colors.accent : colors.ink2,
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                '${gender.labelKo} (${gender.labelEn})',
+                                style: theme.labelMono.copyWith(
+                                  fontSize: 12,
+                                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                                  color: isSelected ? colors.accent : colors.ink,
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (isSelected) ...[
+                            const SizedBox(height: 4),
+                            Text(
+                              '✓ 현재 기본값',
+                              style: theme.labelMono.copyWith(
+                                fontSize: 10,
+                                color: colors.accent,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+          const SizedBox(height: 16),
+
+          // 샘플 발음 들어보기
+          Row(
+            children: [
+              Text(
+                'SAMPLE TEST · 샘플 청취:',
+                style: theme.labelMono.copyWith(fontSize: 10, color: colors.ink3),
+              ),
+              const SizedBox(width: 8),
+              CabinetPronounceButtons(
+                word: 'serendipity',
+                colors: colors,
+                theme: theme,
+                compact: true,
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }

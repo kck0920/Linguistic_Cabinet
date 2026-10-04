@@ -7,6 +7,7 @@ import 'package:flutter_markdown/flutter_markdown.dart';
 import '../../../words/data/models/word.dart';
 import '../../../../core/theme/cabinet_colors.dart';
 import '../../../../core/theme/cabinet_theme.dart';
+import '../../../../shared/services/tts_service.dart';
 import '../../../../shared/widgets/cabinet_widgets.dart';
 import '../../../achievements/data/achievement_evaluator.dart';
 import 'review_screen.dart';
@@ -358,6 +359,13 @@ class _FlashcardScreenState extends ConsumerState<FlashcardScreen>
               ),
             ),
           ],
+          const SizedBox(height: 12),
+          CabinetPronounceButtons(
+            word: word.english,
+            colors: colors,
+            theme: theme,
+            compact: true,
+          ),
           const Spacer(),
           Text(
             '뜻이 떠오르나요? Tap to flip ↺',
@@ -410,6 +418,13 @@ class _FlashcardScreenState extends ConsumerState<FlashcardScreen>
                         ),
                       ),
                     ),
+                  ),
+                  const SizedBox(height: 10),
+                  CabinetPronounceButtons(
+                    word: word.english,
+                    colors: colors,
+                    theme: theme,
+                    compact: true,
                   ),
                   if (word.exampleSentence != null && word.exampleSentence!.isNotEmpty) ...[
                     const SizedBox(height: 16),
