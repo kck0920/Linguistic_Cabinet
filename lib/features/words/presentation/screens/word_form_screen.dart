@@ -337,17 +337,22 @@ class _WordFormScreenState extends ConsumerState<WordFormScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Container(
-                                height: 160,
+                                constraints: const BoxConstraints(maxHeight: 280, minHeight: 120),
                                 width: double.infinity,
                                 decoration: BoxDecoration(
+                                  color: colors.paper3,
                                   border: Border.all(color: colors.inkLine),
                                   borderRadius: BorderRadius.circular(4),
                                 ),
-                                child: Image.memory(
-                                  _imageBytes!,
-                                  fit: BoxFit.cover,
-                                  errorBuilder: (context, error, stackTrace) =>
-                                      Center(child: Text('이미지 로드 실패', style: theme.bodySans)),
+                                alignment: Alignment.center,
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(3),
+                                  child: Image.memory(
+                                    _imageBytes!,
+                                    fit: BoxFit.contain,
+                                    errorBuilder: (context, error, stackTrace) =>
+                                        Center(child: Text('이미지 로드 실패', style: theme.bodySans)),
+                                  ),
                                 ),
                               ),
                               const SizedBox(height: 6),

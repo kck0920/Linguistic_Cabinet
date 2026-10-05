@@ -475,17 +475,20 @@ class WordListScreen extends ConsumerWidget {
                         // Attached WebP Image
                         if (imageBytes != null) ...[
                           const SizedBox(height: 16),
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(4),
-                            child: Container(
-                              constraints: const BoxConstraints(maxHeight: 220),
-                              width: double.infinity,
-                              decoration: BoxDecoration(
-                                border: Border.all(color: colors.inkLine),
-                              ),
+                          Container(
+                            width: double.infinity,
+                            constraints: const BoxConstraints(maxHeight: 420),
+                            decoration: BoxDecoration(
+                              color: colors.paper3,
+                              border: Border.all(color: colors.inkLine),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            alignment: Alignment.center,
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(3),
                               child: Image.memory(
                                 imageBytes,
-                                fit: BoxFit.cover,
+                                fit: BoxFit.contain,
                                 errorBuilder: (context, error, stackTrace) =>
                                     const SizedBox.shrink(),
                               ),
