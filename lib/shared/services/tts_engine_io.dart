@@ -57,23 +57,69 @@ class TtsEngineIo implements BaseTtsEngine {
           .map((v) => v.map((k, val) => MapEntry(k.toString(), val.toString())))
           .toList();
 
-      final englishVoices = list.where((v) {
+      // 1. 기계음/로봇 변조 구형 보이스 블랙리스트 전면 차단
+      const robotBlacklist = [
+        'fred', 'albert', 'ralph', 'bad news', 'bahh', 'bells', 'boing',
+        'bubbles', 'cellos', 'deranged', 'good news', 'hysterical',
+        'pipe organ', 'trinoids', 'whisper', 'zarvox', 'junior',
+        'princess', 'espeak'
+      ];
+
+      final filtered = list.where((v) {
+        final name = (v['name'] ?? '').toLowerCase();
+        return !robotBlacklist.any((kw) => name.contains(kw));
+      }).toList();
+
+      final candidatePool = filtered.isNotEmpty ? filtered : list;
+
+      final englishVoices = candidatePool.where((v) {
         final loc = (v['locale'] ?? v['lang'] ?? '').toLowerCase();
         return loc.startsWith('en');
       }).toList();
 
-      final pool = englishVoices.isNotEmpty ? englishVoices : list;
+      final pool = englishVoices.isNotEmpty ? englishVoices : candidatePool;
 
       const maleKeywords = [
-        'david', 'daniel', 'alex', 'fred', 'eddy', 'reed', 'rocko', 'ralph',
-        'albert', 'grandpa', 'mark', 'george', 'guy', 'oliver', 'male',
-        'standard-b', 'standard-d', 'wavenet-b', 'wavenet-d', 'neural2-d',
+        'google uk english male',
+        'guy online (natural)',
+        'christopher online (natural)',
+        'ryan online (natural)',
+        'guy neural',
+        'christopher neural',
+        'nathan',
+        'evan',
+        'tom',
+        'oliver',
+        'daniel',
+        'george',
+        'david',
+        'standard-b',
+        'standard-d',
+        'wavenet-b',
+        'wavenet-d',
+        'neural2-d',
+        'male',
       ];
 
       const femaleKeywords = [
-        'samantha', 'victoria', 'karen', 'zira', 'jenny', 'aria', 'flo',
-        'shelley', 'sandy', 'grandma', 'kathy', 'female',
-        'standard-a', 'standard-c', 'standard-e', 'wavenet-a', 'wavenet-c', 'neural2-c',
+        'google us english',
+        'jenny online (natural)',
+        'aria online (natural)',
+        'google uk english female',
+        'jenny neural',
+        'aria neural',
+        'samantha',
+        'ava',
+        'karen',
+        'victoria',
+        'zira',
+        'standard-a',
+        'standard-c',
+        'standard-e',
+        'wavenet-a',
+        'wavenet-c',
+        'neural2-c',
+        'female',
       ];
 
       Map<String, String>? foundMale;
@@ -133,7 +179,8 @@ class TtsEngineIo implements BaseTtsEngine {
         });
       }
 
-      await _tts.setPitch(gender.defaultPitch);
+      // 자연스러운 음성을 위해 1.0(원음) 피치 적용
+      await _tts.setPitch(1.0);
       await _tts.speak(clean);
     } catch (e) {
       debugPrint('IO TTS speak error: $e');

@@ -1,8 +1,8 @@
 import 'dart:ui';
 
 enum TtsVoiceGender {
-  female('여성', 'Female', '♀', 1.15),
-  male('남성', 'Male', '♂', 0.75);
+  female('여성', 'Female', '♀', 1.0),
+  male('남성', 'Male', '♂', 1.0);
 
   final String labelKo;
   final String labelEn;

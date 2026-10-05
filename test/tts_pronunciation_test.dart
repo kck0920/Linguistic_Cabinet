@@ -32,8 +32,8 @@ void main() {
 
     expect(TtsVoiceGender.female.symbol, equals('♀'));
     expect(TtsVoiceGender.male.symbol, equals('♂'));
-    expect(TtsVoiceGender.female.defaultPitch, greaterThan(1.0));
-    expect(TtsVoiceGender.male.defaultPitch, lessThan(1.0));
+    expect(TtsVoiceGender.female.defaultPitch, equals(1.0));
+    expect(TtsVoiceGender.male.defaultPitch, equals(1.0));
   });
 
   testWidgets('CabinetPronounceButtons 여성 및 남성 발음 버튼 렌더링 및 탭 시 speak 호출', (tester) async {
