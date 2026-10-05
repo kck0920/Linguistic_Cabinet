@@ -326,7 +326,28 @@ class _WordFormScreenState extends ConsumerState<WordFormScreen> {
                           style: theme.meaningSerif.copyWith(fontSize: 15, height: 1.4),
                           maxLines: 3,
                           decoration: _buildInputDecoration('e.g. Finding this place was pure serendipity.', colors, theme),
+                          onChanged: (_) {
+                            setState(() {});
+                          },
                         ),
+                        if (_exampleController.text.trim().isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              Text(
+                                'EXAMPLE AUDIO · 예문 듣기:',
+                                style: theme.labelMono.copyWith(fontSize: 10, color: colors.ink3),
+                              ),
+                              const SizedBox(width: 8),
+                              CabinetPronounceButtons(
+                                word: _exampleController.text.trim(),
+                                colors: colors,
+                                theme: theme,
+                                compact: true,
+                              ),
+                            ],
+                          ),
+                        ],
                         const SizedBox(height: 16),
 
                         // Image Attachment (WebP only)

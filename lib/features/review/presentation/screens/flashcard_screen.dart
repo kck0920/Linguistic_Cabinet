@@ -430,14 +430,36 @@ class _FlashcardScreenState extends ConsumerState<FlashcardScreen>
                     const SizedBox(height: 16),
                     ConstrainedBox(
                       constraints: BoxConstraints(maxWidth: math.max(0.0, width - 64)),
-                      child: Text(
-                        '"${word.exampleSentence}"',
-                        textAlign: TextAlign.center,
-                        style: theme.meaningSerif.copyWith(
-                          fontSize: isLarge ? 17 : 15,
-                          height: 1.45,
-                          color: colors.ink2,
-                        ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            '"${word.exampleSentence}"',
+                            textAlign: TextAlign.center,
+                            style: theme.meaningSerif.copyWith(
+                              fontSize: isLarge ? 17 : 15,
+                              height: 1.45,
+                              color: colors.ink2,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                '예문 듣기:',
+                                style: theme.labelMono.copyWith(fontSize: 10, color: colors.ink3),
+                              ),
+                              const SizedBox(width: 6),
+                              CabinetPronounceButtons(
+                                word: word.exampleSentence!,
+                                colors: colors,
+                                theme: theme,
+                                compact: true,
+                              ),
+                            ],
+                          ),
+                        ],
                       ),
                     ),
                   ],

@@ -9,6 +9,7 @@ import '../../features/words/data/models/word.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import '../../features/words/presentation/screens/word_form_screen.dart';
 import '../../features/words/presentation/screens/word_list_screen.dart';
+import '../../shared/services/tts_service.dart';
 import '../home_screen.dart';
 
 /// 대시보드 "오늘의 단어" 카드 — 3D 플립(앞: 영어/뒤: 뜻)과 마스킹 테이프 연출.
@@ -188,6 +189,13 @@ class _DashboardWordOfDayCardState extends ConsumerState<DashboardWordOfDayCard>
               ),
             ),
           ],
+          const SizedBox(height: 8),
+          CabinetPronounceButtons(
+            word: word.english,
+            colors: colors,
+            theme: theme,
+            compact: true,
+          ),
           const SizedBox(height: 16),
           Text('뜻을 떠올려보세요 →', style: theme.handNote.copyWith(fontSize: 20)),
           const SizedBox(height: 20),
@@ -250,11 +258,42 @@ class _DashboardWordOfDayCardState extends ConsumerState<DashboardWordOfDayCard>
               if (word.exampleSentence != null &&
                   word.exampleSentence!.isNotEmpty) ...[
                 const SizedBox(height: 12),
-                Text(
-                  '"${word.exampleSentence}"',
-                  style: theme.meaningSerif.copyWith(
-                    fontSize: 15,
-                    color: colors.ink2,
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: colors.paper3.withValues(alpha: 0.5),
+                    borderRadius: BorderRadius.circular(3),
+                    border: Border.all(color: colors.inkLine),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'EXAMPLE · 예문',
+                            style: theme.labelMono.copyWith(fontSize: 9, color: colors.ink3),
+                          ),
+                          CabinetPronounceButtons(
+                            word: word.exampleSentence!,
+                            colors: colors,
+                            theme: theme,
+                            compact: true,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        '"${word.exampleSentence}"',
+                        style: theme.meaningSerif.copyWith(
+                          fontSize: 14,
+                          color: colors.ink2,
+                          height: 1.4,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],

@@ -450,10 +450,44 @@ class WordListScreen extends ConsumerWidget {
                         Text(word.korean, style: theme.meaningSerif.copyWith(fontSize: 22)),
 
                         if (word.exampleSentence != null && word.exampleSentence!.isNotEmpty) ...[
-                          const SizedBox(height: 12),
-                          Text(
-                            '"${word.exampleSentence}"',
-                            style: theme.meaningSerif.copyWith(fontSize: 16, color: colors.ink2),
+                          const SizedBox(height: 14),
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                            decoration: BoxDecoration(
+                              color: colors.paper3.withValues(alpha: 0.6),
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(color: colors.inkLine),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      'EXAMPLE SENTENCE · 예문',
+                                      style: theme.labelMono.copyWith(fontSize: 10, color: colors.ink3),
+                                    ),
+                                    CabinetPronounceButtons(
+                                      word: word.exampleSentence!,
+                                      colors: colors,
+                                      theme: theme,
+                                      compact: true,
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  '"${word.exampleSentence}"',
+                                  style: theme.meaningSerif.copyWith(
+                                    fontSize: 16,
+                                    color: colors.ink2,
+                                    height: 1.45,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ],
 

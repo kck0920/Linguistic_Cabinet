@@ -208,6 +208,8 @@ class TtsEngineWeb implements BaseTtsEngine {
       }
 
       audio.onplay = ((web.Event e) {
+        _audioTimeoutTimer?.cancel();
+        _audioTimeoutTimer = null;
         _onStart?.call();
       }).toJS;
 

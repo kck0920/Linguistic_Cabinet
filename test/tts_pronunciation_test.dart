@@ -124,4 +124,46 @@ void main() {
     // 설정 테이블에 저장되었는지 확인
     expect(fakeRepo.settings['tts_voice_gender'], equals('male'));
   });
+
+  testWidgets('CabinetPronounceButtons 긴 예문 문장 발음 전달 테스트', (tester) async {
+    final fakeTts = FakeTtsService();
+    final colors = CabinetColors.fromMode(CabinetThemeMode.sepia);
+    final theme = CabinetTheme(colors);
+    const example = 'Finding this place was pure serendipity in the quiet town.';
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ttsServiceProvider.overrideWithValue(fakeTts),
+        ],
+        child: MaterialApp(
+          home: Scaffold(
+            body: CabinetPronounceButtons(
+              word: example,
+              colors: colors,
+              theme: theme,
+              compact: true,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // 여성 발음 탭
+    await tester.tap(find.text('♀ 여성'));
+    await tester.pumpAndSettle();
+
+    expect(fakeTts.speakCalls.length, equals(1));
+    expect(fakeTts.speakCalls.first['text'], equals(example));
+    expect(fakeTts.speakCalls.first['gender'], equals(TtsVoiceGender.female));
+
+    // 남성 발음 탭
+    await tester.tap(find.text('♂ 남성'));
+    await tester.pumpAndSettle();
+
+    expect(fakeTts.speakCalls.length, equals(2));
+    expect(fakeTts.speakCalls.last['text'], equals(example));
+    expect(fakeTts.speakCalls.last['gender'], equals(TtsVoiceGender.male));
+  });
 }
