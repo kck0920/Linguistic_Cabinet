@@ -78,7 +78,14 @@ class TtsEngineWeb implements BaseTtsEngine {
 
     final pool = englishVoices.isNotEmpty ? englishVoices : candidatePool;
 
-    // 2. 남성 음성 키워드 (자연스러운 Neural/Natural/Enhanced 우선순위)
+    // 여성 음성 키워드 (남성 음성 매칭 시 엄격 배제용)
+    const femaleExclusiveKeywords = [
+      'female', 'woman', 'samantha', 'karen', 'victoria', 'zira',
+      'jenny', 'aria', 'flo', 'ava', 'shelley', 'sandy', 'grandma',
+      'kathy', 'fiona', 'moira', 'tessa', 'veena', 'yuri', 'catherine'
+    ];
+
+    // 남성 음성 키워드 (우선순위 순서)
     const maleKeywords = [
       'google uk english male',
       'guy online (natural)',
@@ -101,7 +108,7 @@ class TtsEngineWeb implements BaseTtsEngine {
       'male',
     ];
 
-    // 3. 여성 음성 키워드 (자연스러운 Neural/Natural/Enhanced 우선순위)
+    // 여성 음성 키워드 (우선순위 순서)
     const femaleKeywords = [
       'google us english',
       'jenny online (natural)',
@@ -123,11 +130,13 @@ class TtsEngineWeb implements BaseTtsEngine {
       'female',
     ];
 
-    // 남성 보이스 탐색
+    // 남성 보이스 탐색: 여성 키워드가 포함된 음성은 절대 선택하지 않음!
     web.SpeechSynthesisVoice? foundMale;
     for (final kw in maleKeywords) {
       for (final v in pool) {
-        if (v.name.toLowerCase().contains(kw)) {
+        final name = v.name.toLowerCase();
+        final isFemale = femaleExclusiveKeywords.any((fk) => name.contains(fk));
+        if (!isFemale && name.contains(kw)) {
           foundMale = v;
           break;
         }
@@ -147,17 +156,11 @@ class TtsEngineWeb implements BaseTtsEngine {
       if (foundFemale != null) break;
     }
 
-    // 만약 한쪽만 못 찾은 경우 후보군에서 겹치지 않는 보이스 선택
-    if (foundMale == null && pool.isNotEmpty) {
-      foundMale = pool.firstWhere(
-        (v) => v != foundFemale,
-        orElse: () => pool.first,
-      );
-    }
+    // 여성 보이스를 못 찾았을 경우만 풀에서 배정 (남성은 엉뚱한 여성 보이스로 덮어쓰지 않음)
     if (foundFemale == null && pool.isNotEmpty) {
       foundFemale = pool.firstWhere(
         (v) => v != foundMale,
-        orElse: () => pool.last,
+        orElse: () => pool.first,
       );
     }
 
@@ -168,29 +171,45 @@ class TtsEngineWeb implements BaseTtsEngine {
     debugPrint('TTS Web Resolved Voices: Male=${_cachedMaleVoice?.name} (${_cachedMaleVoice?.lang}), Female=${_cachedFemaleVoice?.name} (${_cachedFemaleVoice?.lang})');
   }
 
-  /// Anki 스타일의 고품질 원어민 오디오 스트림 URL 생성
-  String? _getAudioStreamUrl(String text, TtsVoiceGender gender) {
+  /// 고품질 원어민 오디오 스트림 URL 목록 (1순위: Polly 서버리스 스트림, 2순위: Google/Youdao 원음 스트림)
+  List<String> _getAudioStreamUrls(String text, TtsVoiceGender gender) {
     final clean = text.trim();
-    if (clean.isEmpty) return null;
+    if (clean.isEmpty) return const [];
 
+    final encoded = Uri.encodeComponent(clean);
+    final urls = <String>[];
+
+    // 1순위: Vercel Serverless Function을 통한 Amazon Polly 최고급 원어민 네이티브 음성 (남성: Matthew, 여성: Joanna)
+    // 단어뿐만 아니라 아무리 긴 문장도 끊김 없이 100% 네이티브 유려한 성우 음성으로 재생
+    urls.add('/api/tts?text=$encoded&gender=${gender.name}');
+
+    // 2순위 (오프라인 / 로컬 개발 환경 폴백):
     if (gender == TtsVoiceGender.female) {
-      // Anki AwesomeTTS 대표 음원: Google Translate TTS의 부드럽고 자연스러운 미국식 신경망 원음 스트림
-      return 'https://translate.google.com/translate_tts?ie=UTF-8&tl=en-US&client=tw-ob&q=${Uri.encodeComponent(clean)}';
+      urls.add('https://translate.google.com/translate_tts?ie=UTF-8&tl=en-US&client=tw-ob&q=$encoded');
     } else {
-      // 남성: 단어인 경우 Anki에서 널리 쓰이는 영국식 원어민 스튜디오 녹음 오디오 스트림
       if (!clean.contains(' ')) {
-        return 'https://dict.youdao.com/dictvoice?audio=${Uri.encodeComponent(clean)}&type=1';
+        urls.add('https://dict.youdao.com/dictvoice?audio=$encoded&type=1');
       }
-      // 문장/구문인 경우 Web Speech API의 Google UK English Male 또는 남성 음성으로 처리
-      return null;
     }
+
+    return urls;
   }
 
-  /// Anki 스타일 원어민 오디오 스트림 재생 시도 (실패 시 false 반환 후 Web Speech로 폴백)
+  /// 원어민 오디오 스트림 재생 시도 (순차적 폴백)
   Future<bool> _tryPlayAudioStream(String text, TtsVoiceGender gender) async {
-    final url = _getAudioStreamUrl(text, gender);
-    if (url == null) return false;
+    final urls = _getAudioStreamUrls(text, gender);
+    if (urls.isEmpty) return false;
 
+    for (final url in urls) {
+      final success = await _playSingleAudioUrl(url);
+      if (success) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  Future<bool> _playSingleAudioUrl(String url) async {
     _stopAll(notify: false);
 
     final completer = Completer<bool>();
@@ -208,6 +227,7 @@ class TtsEngineWeb implements BaseTtsEngine {
       }
 
       audio.onplay = ((web.Event e) {
+        // 재생이 정상 시작되었으므로 타임아웃 타이머 취소 (긴 문장 완독 보장)
         _audioTimeoutTimer?.cancel();
         _audioTimeoutTimer = null;
         _onStart?.call();
@@ -224,8 +244,8 @@ class TtsEngineWeb implements BaseTtsEngine {
         if (!completer.isCompleted) completer.complete(false);
       }).toJS;
 
-      // 네트워크 지연/오프라인 방지: 3초 내에 완료되거나 재생되지 않으면 Fallback
-      _audioTimeoutTimer = Timer(const Duration(milliseconds: 3000), () {
+      // 4.5초 내에 재생이 시작되지 않으면 다음 소스로 Fallback
+      _audioTimeoutTimer = Timer(const Duration(milliseconds: 4500), () {
         if (!completer.isCompleted) {
           cleanup();
           completer.complete(false);
@@ -246,7 +266,7 @@ class TtsEngineWeb implements BaseTtsEngine {
     }
   }
 
-  /// 브라우저 내장 고품질 Web Speech API 재생 (피치 왜곡 없는 순수 원음)
+  /// 브라우저 내장 Web Speech API Fallback
   Future<void> _speakViaWebSpeech(String clean, TtsVoiceGender gender) async {
     try {
       final synth = web.window.speechSynthesis;
@@ -266,9 +286,8 @@ class TtsEngineWeb implements BaseTtsEngine {
         utterance.lang = 'en-US';
       }
 
-      // Anki처럼 자연스러운 원음을 위해 피치 왜곡(0.75, 1.15)을 완전히 제거하고 1.0(원음) 적용
+      // 자연스러운 원음을 위해 피치 왜곡 없이 1.0(원음) 적용
       utterance.pitch = 1.0;
-      // 사람이 또렷하고 명확하게 낭독하는 최적 속도
       utterance.rate = 0.95;
       utterance.volume = 1.0;
 
@@ -299,13 +318,13 @@ class TtsEngineWeb implements BaseTtsEngine {
     final clean = text.trim();
     if (clean.isEmpty) return;
 
-    // 1차: Anki 방식의 자연스러운 원어민 오디오 스트림 재생 시도
+    // 1차: 최고급 원어민 네이티브 오디오 스트림 재생 시도 (단어 및 예문 문장 모두 지원)
     final audioSuccess = await _tryPlayAudioStream(clean, gender);
     if (audioSuccess) {
       return;
     }
 
-    // 2차: 오디오 스트림 실패 또는 문장/구문인 경우 고품질 Web Speech API로 즉시 폴백
+    // 2차: 오디오 스트림 실패 시 Web Speech API 폴백
     await _speakViaWebSpeech(clean, gender);
   }
 
