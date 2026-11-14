@@ -378,11 +378,11 @@ class _CabinetBrutalButtonState extends State<CabinetBrutalButton> {
                 fit: BoxFit.scaleDown,
                 child: Text(
                   widget.text.toUpperCase(),
-                  style: GoogleFonts.inter(
+                  style: GoogleFonts.notoSansKr(
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
                     color: inkColor,
-                    letterSpacing: 0.5,
+                    letterSpacing: 0.3,
                   ),
                 ),
               ),
@@ -464,11 +464,11 @@ class CabinetStamp extends StatelessWidget {
         ),
         child: Text(
           text.toUpperCase(),
-          style: GoogleFonts.jetBrainsMono(
+          style: GoogleFonts.notoSansKr(
             fontSize: fontSize,
             fontWeight: FontWeight.w700,
             color: color,
-            letterSpacing: 1.8,
+            letterSpacing: 0.8,
           ),
         ),
       ),

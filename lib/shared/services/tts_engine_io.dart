@@ -57,99 +57,19 @@ class TtsEngineIo implements BaseTtsEngine {
           .map((v) => v.map((k, val) => MapEntry(k.toString(), val.toString())))
           .toList();
 
-      // 1. 기계음/로봇 변조 구형 보이스 블랙리스트 전면 차단
-      const robotBlacklist = [
-        'fred', 'albert', 'ralph', 'bad news', 'bahh', 'bells', 'boing',
-        'bubbles', 'cellos', 'deranged', 'good news', 'hysterical',
-        'pipe organ', 'trinoids', 'whisper', 'zarvox', 'junior',
-        'princess', 'espeak'
-      ];
+      final candidates = list
+          .map((v) => TtsVoiceCandidate(
+                name: v['name'] ?? '',
+                localeOrLang: v['locale'] ?? v['lang'] ?? '',
+                gender: v['gender'] ?? '',
+              ))
+          .toList();
 
-      final filtered = list.where((v) {
-        final name = (v['name'] ?? '').toLowerCase();
-        return !robotBlacklist.any((kw) => name.contains(kw));
-      }).toList();
-
-      final candidatePool = filtered.isNotEmpty ? filtered : list;
-
-      final englishVoices = candidatePool.where((v) {
-        final loc = (v['locale'] ?? v['lang'] ?? '').toLowerCase();
-        return loc.startsWith('en');
-      }).toList();
-
-      final pool = englishVoices.isNotEmpty ? englishVoices : candidatePool;
-
-      const maleKeywords = [
-        'google uk english male',
-        'guy online (natural)',
-        'christopher online (natural)',
-        'ryan online (natural)',
-        'guy neural',
-        'christopher neural',
-        'nathan',
-        'evan',
-        'tom',
-        'oliver',
-        'daniel',
-        'george',
-        'david',
-        'standard-b',
-        'standard-d',
-        'wavenet-b',
-        'wavenet-d',
-        'neural2-d',
-        'male',
-      ];
-
-      const femaleKeywords = [
-        'google us english',
-        'jenny online (natural)',
-        'aria online (natural)',
-        'google uk english female',
-        'jenny neural',
-        'aria neural',
-        'samantha',
-        'ava',
-        'karen',
-        'victoria',
-        'zira',
-        'standard-a',
-        'standard-c',
-        'standard-e',
-        'wavenet-a',
-        'wavenet-c',
-        'neural2-c',
-        'female',
-      ];
-
-      Map<String, String>? foundMale;
-      for (final kw in maleKeywords) {
-        for (final v in pool) {
-          final name = (v['name'] ?? '').toLowerCase();
-          final g = (v['gender'] ?? '').toLowerCase();
-          if (g == 'male' || name.contains(kw)) {
-            foundMale = v;
-            break;
-          }
-        }
-        if (foundMale != null) break;
-      }
-
-      Map<String, String>? foundFemale;
-      for (final kw in femaleKeywords) {
-        for (final v in pool) {
-          final name = (v['name'] ?? '').toLowerCase();
-          final g = (v['gender'] ?? '').toLowerCase();
-          if (g == 'female' || name.contains(kw)) {
-            foundFemale = v;
-            break;
-          }
-        }
-        if (foundFemale != null) break;
-      }
-
-      _cachedMaleVoice = foundMale;
-      _cachedFemaleVoice = foundFemale;
+      final resolved = TtsVoiceResolver.resolve(candidates);
+      _cachedMaleVoice =
+          resolved.maleIndex != null ? list[resolved.maleIndex!] : null;
+      _cachedFemaleVoice =
+          resolved.femaleIndex != null ? list[resolved.femaleIndex!] : null;
     } catch (e) {
       debugPrint('IO TTS resolve voices error: $e');
     }
@@ -177,10 +97,12 @@ class TtsEngineIo implements BaseTtsEngine {
           'name': targetVoice['name']!,
           'locale': targetVoice['locale'] ?? targetVoice['lang'] ?? 'en-US',
         });
+        // 전용 성별 보이스를 찾았을 때는 자연스러운 원음 피치(1.0) 적용
+        await _tts.setPitch(1.0);
+      } else {
+        // 해당 성별의 전용 보이스가 없을 때만 피치로 남/여 구분
+        await _tts.setPitch(gender == TtsVoiceGender.male ? 0.78 : 1.05);
       }
-
-      // 자연스러운 음성을 위해 1.0(원음) 피치 적용
-      await _tts.setPitch(1.0);
       await _tts.speak(clean);
     } catch (e) {
       debugPrint('IO TTS speak error: $e');

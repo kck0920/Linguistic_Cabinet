@@ -67,11 +67,8 @@ module.exports = async (req, res) => {
       const fallbackUrl = `https://translate.google.com/translate_tts?ie=UTF-8&tl=en-US&client=tw-ob&q=${encodeURIComponent(clean)}`;
       return res.redirect(302, fallbackUrl);
     } else {
-      if (!clean.includes(' ')) {
-        const fallbackUrl = `https://dict.youdao.com/dictvoice?audio=${encodeURIComponent(clean)}&type=1`;
-        return res.redirect(302, fallbackUrl);
-      }
-      return res.status(502).json({ error: 'TTS provider unavailable' });
+      // Youdao dictvoice는 여성 성우 음성이므로 남성 발음 폴백으로 사용하지 않음
+      return res.status(502).json({ error: 'Male TTS provider unavailable' });
     }
   }
 };

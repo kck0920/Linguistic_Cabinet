@@ -18,6 +18,15 @@ class TtsEngineWeb implements BaseTtsEngine {
 
   @override
   Future<void> init() async {
+    try {
+      final synth = web.window.speechSynthesis;
+      synth.onvoiceschanged = ((web.Event e) {
+        final voices = synth.getVoices().toDart;
+        if (voices.isNotEmpty) {
+          _resolveVoices(voices);
+        }
+      }).toJS;
+    } catch (_) {}
     await _ensureVoicesLoaded();
   }
 
@@ -33,7 +42,7 @@ class TtsEngineWeb implements BaseTtsEngine {
   }
 
   Future<void> _ensureVoicesLoaded() async {
-    if (_voicesLoaded && (_cachedMaleVoice != null || _cachedFemaleVoice != null)) {
+    if (_voicesLoaded && _cachedMaleVoice != null && _cachedFemaleVoice != null) {
       return;
     }
 
@@ -49,123 +58,23 @@ class TtsEngineWeb implements BaseTtsEngine {
       }
     }
 
-    _resolveVoices(rawVoices);
+    if (rawVoices.isNotEmpty) {
+      _resolveVoices(rawVoices);
+    }
   }
 
   void _resolveVoices(List<web.SpeechSynthesisVoice> rawVoices) {
     if (rawVoices.isEmpty) return;
 
-    // 1. 기계음/로봇 변조 구형 보이스 블랙리스트 전면 차단
-    const robotBlacklist = [
-      'fred', 'albert', 'ralph', 'bad news', 'bahh', 'bells', 'boing',
-      'bubbles', 'cellos', 'deranged', 'good news', 'hysterical',
-      'pipe organ', 'trinoids', 'whisper', 'zarvox', 'junior',
-      'princess', 'espeak'
-    ];
+    final candidates = rawVoices
+        .map((v) => TtsVoiceCandidate(name: v.name, localeOrLang: v.lang))
+        .toList();
+    final resolved = TtsVoiceResolver.resolve(candidates);
 
-    final filtered = rawVoices.where((v) {
-      final name = v.name.toLowerCase();
-      return !robotBlacklist.any((kw) => name.contains(kw));
-    }).toList();
-
-    final candidatePool = filtered.isNotEmpty ? filtered : rawVoices;
-
-    // 영어 음성 필터링 (en-US, en-GB, en-AU 등)
-    final englishVoices = candidatePool.where((v) {
-      final lang = v.lang.toLowerCase();
-      return lang.startsWith('en');
-    }).toList();
-
-    final pool = englishVoices.isNotEmpty ? englishVoices : candidatePool;
-
-    // 여성 음성 키워드 (남성 음성 매칭 시 엄격 배제용)
-    const femaleExclusiveKeywords = [
-      'female', 'woman', 'samantha', 'karen', 'victoria', 'zira',
-      'jenny', 'aria', 'flo', 'ava', 'shelley', 'sandy', 'grandma',
-      'kathy', 'fiona', 'moira', 'tessa', 'veena', 'yuri', 'catherine'
-    ];
-
-    // 남성 음성 키워드 (우선순위 순서)
-    const maleKeywords = [
-      'google uk english male',
-      'guy online (natural)',
-      'christopher online (natural)',
-      'ryan online (natural)',
-      'guy neural',
-      'christopher neural',
-      'nathan',
-      'evan',
-      'tom',
-      'oliver',
-      'daniel',
-      'george',
-      'david',
-      'standard-b',
-      'standard-d',
-      'wavenet-b',
-      'wavenet-d',
-      'neural2-d',
-      'male',
-    ];
-
-    // 여성 음성 키워드 (우선순위 순서)
-    const femaleKeywords = [
-      'google us english',
-      'jenny online (natural)',
-      'aria online (natural)',
-      'google uk english female',
-      'jenny neural',
-      'aria neural',
-      'samantha',
-      'ava',
-      'karen',
-      'victoria',
-      'zira',
-      'standard-a',
-      'standard-c',
-      'standard-e',
-      'wavenet-a',
-      'wavenet-c',
-      'neural2-c',
-      'female',
-    ];
-
-    // 남성 보이스 탐색: 여성 키워드가 포함된 음성은 절대 선택하지 않음!
-    web.SpeechSynthesisVoice? foundMale;
-    for (final kw in maleKeywords) {
-      for (final v in pool) {
-        final name = v.name.toLowerCase();
-        final isFemale = femaleExclusiveKeywords.any((fk) => name.contains(fk));
-        if (!isFemale && name.contains(kw)) {
-          foundMale = v;
-          break;
-        }
-      }
-      if (foundMale != null) break;
-    }
-
-    // 여성 보이스 탐색
-    web.SpeechSynthesisVoice? foundFemale;
-    for (final kw in femaleKeywords) {
-      for (final v in pool) {
-        if (v.name.toLowerCase().contains(kw)) {
-          foundFemale = v;
-          break;
-        }
-      }
-      if (foundFemale != null) break;
-    }
-
-    // 여성 보이스를 못 찾았을 경우만 풀에서 배정 (남성은 엉뚱한 여성 보이스로 덮어쓰지 않음)
-    if (foundFemale == null && pool.isNotEmpty) {
-      foundFemale = pool.firstWhere(
-        (v) => v != foundMale,
-        orElse: () => pool.first,
-      );
-    }
-
-    _cachedMaleVoice = foundMale;
-    _cachedFemaleVoice = foundFemale;
+    _cachedMaleVoice =
+        resolved.maleIndex != null ? rawVoices[resolved.maleIndex!] : null;
+    _cachedFemaleVoice =
+        resolved.femaleIndex != null ? rawVoices[resolved.femaleIndex!] : null;
     _voicesLoaded = true;
 
     debugPrint('TTS Web Resolved Voices: Male=${_cachedMaleVoice?.name} (${_cachedMaleVoice?.lang}), Female=${_cachedFemaleVoice?.name} (${_cachedFemaleVoice?.lang})');
@@ -180,16 +89,13 @@ class TtsEngineWeb implements BaseTtsEngine {
     final urls = <String>[];
 
     // 1순위: Vercel Serverless Function을 통한 Amazon Polly 최고급 원어민 네이티브 음성 (남성: Matthew, 여성: Joanna)
-    // 단어뿐만 아니라 아무리 긴 문장도 끊김 없이 100% 네이티브 유려한 성우 음성으로 재생
+    // (현재 외부 프록시가 차단된 경우 빠른 폴백 후 Web Speech API 사용)
     urls.add('/api/tts?text=$encoded&gender=${gender.name}');
 
     // 2순위 (오프라인 / 로컬 개발 환경 폴백):
+    // 참고: Youdao dictvoice는 여성 성우 음성만 제공하므로 남성 발음에는 사용하지 않음
     if (gender == TtsVoiceGender.female) {
       urls.add('https://translate.google.com/translate_tts?ie=UTF-8&tl=en-US&client=tw-ob&q=$encoded');
-    } else {
-      if (!clean.contains(' ')) {
-        urls.add('https://dict.youdao.com/dictvoice?audio=$encoded&type=1');
-      }
     }
 
     return urls;
@@ -282,12 +188,14 @@ class TtsEngineWeb implements BaseTtsEngine {
       if (targetVoice != null) {
         utterance.voice = targetVoice;
         utterance.lang = targetVoice.lang;
+        // 전용 성별 보이스를 찾았을 때는 원음 피치(1.0) 사용
+        utterance.pitch = 1.0;
       } else {
         utterance.lang = 'en-US';
+        // 남성 보이스를 찾지 못해 기본(보통 여성) 음성으로 재생될 경우 저음 피치로 구분
+        utterance.pitch = (gender == TtsVoiceGender.male) ? 0.78 : 1.0;
       }
 
-      // 자연스러운 원음을 위해 피치 왜곡 없이 1.0(원음) 적용
-      utterance.pitch = 1.0;
       utterance.rate = 0.95;
       utterance.volume = 1.0;
 
@@ -318,13 +226,23 @@ class TtsEngineWeb implements BaseTtsEngine {
     final clean = text.trim();
     if (clean.isEmpty) return;
 
-    // 1차: 최고급 원어민 네이티브 오디오 스트림 재생 시도 (단어 및 예문 문장 모두 지원)
+    await _ensureVoicesLoaded();
+    final hasDedicatedWebVoice = (gender == TtsVoiceGender.male)
+        ? _cachedMaleVoice != null
+        : _cachedFemaleVoice != null;
+
+    // 전용 성별 Web Speech 보이스가 준비되어 있으면 즉시 재생 (네트워크 지연 및 여성 폴백 방지)
+    if (hasDedicatedWebVoice) {
+      await _speakViaWebSpeech(clean, gender);
+      return;
+    }
+
+    // 전용 Web Speech 보이스가 없을 때만 오디오 스트림 시도 후 Web Speech 폴백
     final audioSuccess = await _tryPlayAudioStream(clean, gender);
     if (audioSuccess) {
       return;
     }
 
-    // 2차: 오디오 스트림 실패 시 Web Speech API 폴백
     await _speakViaWebSpeech(clean, gender);
   }
 

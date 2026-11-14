@@ -44,82 +44,89 @@ class CabinetTheme {
   CabinetTheme(this.colors);
 
   static const List<String> fontFallback = [
-    'Noto Sans',
+    'Noto Sans KR',
     'Apple SD Gothic Neo',
     'Malgun Gothic',
+    'Noto Sans',
     'Segoe UI',
     'Roboto',
     'sans-serif',
   ];
 
-  TextStyle get displaySerif => GoogleFonts.fraunces(
-        fontSize: 32,
-        fontWeight: FontWeight.w300,
-        fontStyle: FontStyle.italic,
-        color: colors.ink,
-        letterSpacing: -0.6,
-      ).copyWith(fontFamilyFallback: fontFallback);
-
-  TextStyle get wordTitle => GoogleFonts.fraunces(
-        fontSize: 26,
-        fontWeight: FontWeight.w500,
+  TextStyle get displaySerif => GoogleFonts.notoSansKr(
+        fontSize: 30,
+        fontWeight: FontWeight.w700,
         color: colors.ink,
         letterSpacing: -0.4,
+        height: 1.25,
       ).copyWith(fontFamilyFallback: fontFallback);
 
-  TextStyle get wordBig => GoogleFonts.fraunces(
-        fontSize: 48,
-        fontWeight: FontWeight.w400,
+  TextStyle get wordTitle => GoogleFonts.notoSansKr(
+        fontSize: 26,
+        fontWeight: FontWeight.w700,
         color: colors.ink,
-        letterSpacing: -0.8,
+        letterSpacing: -0.3,
+        height: 1.25,
       ).copyWith(fontFamilyFallback: fontFallback);
 
-  TextStyle get wordHuge => GoogleFonts.fraunces(
-        fontSize: 64,
-        fontWeight: FontWeight.w300,
-        fontStyle: FontStyle.italic,
+  TextStyle get wordBig => GoogleFonts.notoSansKr(
+        fontSize: 44,
+        fontWeight: FontWeight.w700,
         color: colors.ink,
-        height: 1.0,
+        letterSpacing: -0.6,
+        height: 1.2,
       ).copyWith(fontFamilyFallback: fontFallback);
 
-  TextStyle get meaningSerif => GoogleFonts.fraunces(
+  TextStyle get wordHuge => GoogleFonts.notoSansKr(
+        fontSize: 56,
+        fontWeight: FontWeight.w600,
+        color: colors.ink,
+        letterSpacing: -0.6,
+        height: 1.15,
+      ).copyWith(fontFamilyFallback: fontFallback);
+
+  TextStyle get meaningSerif => GoogleFonts.notoSansKr(
         fontSize: 18,
-        fontWeight: FontWeight.w400,
-        fontStyle: FontStyle.italic,
+        fontWeight: FontWeight.w500,
         color: colors.ink,
+        height: 1.4,
       ).copyWith(fontFamilyFallback: fontFallback);
 
-  TextStyle get bodySans => GoogleFonts.inter(
+  TextStyle get bodySans => GoogleFonts.notoSansKr(
         fontSize: 14,
         fontWeight: FontWeight.w400,
         color: colors.ink,
+        height: 1.5,
       ).copyWith(fontFamilyFallback: fontFallback);
 
-  TextStyle get labelMono => GoogleFonts.jetBrainsMono(
-        fontSize: 10,
-        fontWeight: FontWeight.w400,
-        color: colors.ink3,
-        letterSpacing: 1.6,
-      ).copyWith(fontFamilyFallback: fontFallback);
-
-  TextStyle get catalogNo => GoogleFonts.jetBrainsMono(
-        fontSize: 10,
-        fontWeight: FontWeight.w400,
-        color: colors.ink3,
-        letterSpacing: 1.4,
-      ).copyWith(fontFamilyFallback: fontFallback);
-
-  TextStyle get handNote => GoogleFonts.caveat(
-        fontSize: 19,
+  TextStyle get labelMono => GoogleFonts.notoSansKr(
+        fontSize: 11,
         fontWeight: FontWeight.w500,
-        color: colors.accent,
+        color: colors.ink3,
+        letterSpacing: 0.4,
+        height: 1.35,
       ).copyWith(fontFamilyFallback: fontFallback);
 
-  TextStyle get brutalButtonText => GoogleFonts.inter(
+  TextStyle get catalogNo => GoogleFonts.notoSansKr(
+        fontSize: 11,
+        fontWeight: FontWeight.w500,
+        color: colors.ink3,
+        letterSpacing: 0.5,
+        height: 1.35,
+      ).copyWith(fontFamilyFallback: fontFallback);
+
+  TextStyle get handNote => GoogleFonts.notoSansKr(
+        fontSize: 16,
+        fontWeight: FontWeight.w400,
+        color: colors.accent,
+        height: 1.5,
+      ).copyWith(fontFamilyFallback: fontFallback);
+
+  TextStyle get brutalButtonText => GoogleFonts.notoSansKr(
         fontSize: 13,
         fontWeight: FontWeight.w700,
         color: colors.brutalInk,
-        letterSpacing: 0.4,
+        letterSpacing: 0.2,
       ).copyWith(fontFamilyFallback: fontFallback);
 
   MarkdownStyleSheet buildMarkdownStyle({double fontSize = 16, Color? textColor}) {
@@ -148,17 +155,26 @@ class CabinetTheme {
   }
 
   ThemeData get themeData {
+    final baseTextTheme = GoogleFonts.notoSansKrTextTheme(
+      ThemeData.light().textTheme,
+    ).apply(
+      bodyColor: colors.ink,
+      displayColor: colors.ink,
+    );
+
     return ThemeData(
       brightness: Brightness.light,
       scaffoldBackgroundColor: colors.paper,
       primaryColor: colors.accent,
+      fontFamily: GoogleFonts.notoSansKr().fontFamily,
+      fontFamilyFallback: fontFallback,
       colorScheme: ColorScheme.light(
         primary: colors.accent,
         secondary: colors.accent2,
         surface: colors.paper2,
         onSurface: colors.ink,
       ),
-      textTheme: TextTheme(
+      textTheme: baseTextTheme.copyWith(
         bodyMedium: bodySans,
         titleMedium: meaningSerif,
       ),
