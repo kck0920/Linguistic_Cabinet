@@ -55,19 +55,23 @@ module.exports = async (req, res) => {
   }
 
   const isMale = (gender || '').toLowerCase() === 'male';
-  // 미국 네이티브 최고급 원어민 음성: 남성 Matthew, 여성 Joanna
+  // 미국 네이티브 표준 원어민 음성: 남성 Matthew, 여성 Joanna
   const speaker = isMale ? 'Matthew' : 'Joanna';
 
   try {
-    const audioUrl = await fetchPollyUrl(clean, speaker);
+    const streamUrl = `https://api.streamelements.com/kappa/v2/speech?voice=${speaker}&text=${encodeURIComponent(clean)}`;
     res.setHeader('Cache-Control', 'public, max-age=86400');
-    return res.redirect(302, audioUrl);
+    return res.redirect(302, streamUrl);
   } catch (err) {
-    if (!isMale) {
-      const fallbackUrl = `https://translate.google.com/translate_tts?ie=UTF-8&tl=en-US&client=tw-ob&q=${encodeURIComponent(clean)}`;
-      return res.redirect(302, fallbackUrl);
-    } else {
-      // Youdao dictvoice는 여성 성우 음성이므로 남성 발음 폴백으로 사용하지 않음
+    try {
+      const audioUrl = await fetchPollyUrl(clean, speaker);
+      res.setHeader('Cache-Control', 'public, max-age=86400');
+      return res.redirect(302, audioUrl);
+    } catch (_) {
+      if (!isMale) {
+        const fallbackUrl = `https://translate.google.com/translate_tts?ie=UTF-8&tl=en-US&client=tw-ob&q=${encodeURIComponent(clean)}`;
+        return res.redirect(302, fallbackUrl);
+      }
       return res.status(502).json({ error: 'Male TTS provider unavailable' });
     }
   }

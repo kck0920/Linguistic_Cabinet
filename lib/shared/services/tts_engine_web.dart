@@ -86,14 +86,15 @@ class TtsEngineWeb implements BaseTtsEngine {
     if (clean.isEmpty) return const [];
 
     final encoded = Uri.encodeComponent(clean);
-    final urls = <String>[];
+    final speaker = (gender == TtsVoiceGender.male) ? 'Matthew' : 'Joanna';
+    final urls = <String>[
+      // 1순위: Amazon Polly 미국인 표준 성우 (남성: Matthew, 여성: Joanna)
+      'https://api.streamelements.com/kappa/v2/speech?voice=$speaker&text=$encoded',
+      // 2순위: Vercel Serverless Function 프록시
+      '/api/tts?text=$encoded&gender=${gender.name}',
+    ];
 
-    // 1순위: Vercel Serverless Function을 통한 Amazon Polly 최고급 원어민 네이티브 음성 (남성: Matthew, 여성: Joanna)
-    // (현재 외부 프록시가 차단된 경우 빠른 폴백 후 Web Speech API 사용)
-    urls.add('/api/tts?text=$encoded&gender=${gender.name}');
-
-    // 2순위 (오프라인 / 로컬 개발 환경 폴백):
-    // 참고: Youdao dictvoice는 여성 성우 음성만 제공하므로 남성 발음에는 사용하지 않음
+    // 3순위 (오프라인 / 폴백): 여성 음성만 Google Translate TTS 지원
     if (gender == TtsVoiceGender.female) {
       urls.add('https://translate.google.com/translate_tts?ie=UTF-8&tl=en-US&client=tw-ob&q=$encoded');
     }
@@ -226,23 +227,13 @@ class TtsEngineWeb implements BaseTtsEngine {
     final clean = text.trim();
     if (clean.isEmpty) return;
 
-    await _ensureVoicesLoaded();
-    final hasDedicatedWebVoice = (gender == TtsVoiceGender.male)
-        ? _cachedMaleVoice != null
-        : _cachedFemaleVoice != null;
-
-    // 전용 성별 Web Speech 보이스가 준비되어 있으면 즉시 재생 (네트워크 지연 및 여성 폴백 방지)
-    if (hasDedicatedWebVoice) {
-      await _speakViaWebSpeech(clean, gender);
-      return;
-    }
-
-    // 전용 Web Speech 보이스가 없을 때만 오디오 스트림 시도 후 Web Speech 폴백
+    // 1순위: 미국인 표준 원어민 오디오 스트림 (남성: Matthew, 여성: Joanna)
     final audioSuccess = await _tryPlayAudioStream(clean, gender);
     if (audioSuccess) {
       return;
     }
 
+    // 2순위: 오디오 스트림 실패(오프라인 등) 시 Web Speech API 폴백
     await _speakViaWebSpeech(clean, gender);
   }
 
