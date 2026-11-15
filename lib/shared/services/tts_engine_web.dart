@@ -196,7 +196,7 @@ class TtsEngineWeb implements BaseTtsEngine {
         utterance.pitch = (gender == TtsVoiceGender.male) ? 0.78 : 1.0;
       }
 
-      utterance.rate = 0.95;
+      utterance.rate = 0.97;
       utterance.volume = 1.0;
 
       utterance.onstart = ((web.Event e) {

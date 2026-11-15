@@ -332,19 +332,29 @@ class _WordFormScreenState extends ConsumerState<WordFormScreen> {
                         ),
                         if (_exampleController.text.trim().isNotEmpty) ...[
                           const SizedBox(height: 8),
-                          Row(
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
-                                'EXAMPLE AUDIO · 예문 듣기:',
-                                style: theme.labelMono.copyWith(fontSize: 10, color: colors.ink3),
-                              ),
-                              const SizedBox(width: 8),
-                              CabinetPronounceButtons(
-                                word: _exampleController.text.trim(),
-                                colors: colors,
-                                theme: theme,
-                                compact: true,
-                              ),
+                              for (final entry in splitExampleSentences(_exampleController.text).asMap().entries) ...[
+                                if (entry.key > 0) const SizedBox(height: 6),
+                                Row(
+                                  children: [
+                                    Text(
+                                      splitExampleSentences(_exampleController.text).length > 1
+                                          ? 'EXAMPLE ${entry.key + 1} · 예문 ${entry.key + 1}:'
+                                          : 'EXAMPLE AUDIO · 예문 듣기:',
+                                      style: theme.labelMono.copyWith(fontSize: 10, color: colors.ink3),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    CabinetPronounceButtons(
+                                      word: entry.value,
+                                      colors: colors,
+                                      theme: theme,
+                                      compact: true,
+                                    ),
+                                  ],
+                                ),
+                              ],
                             ],
                           ),
                         ],

@@ -269,29 +269,16 @@ class _DashboardWordOfDayCardState extends ConsumerState<DashboardWordOfDayCard>
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            'EXAMPLE · 예문',
-                            style: theme.labelMono.copyWith(fontSize: 9, color: colors.ink3),
-                          ),
-                          CabinetPronounceButtons(
-                            word: word.exampleSentence!,
-                            colors: colors,
-                            theme: theme,
-                            compact: true,
-                          ),
-                        ],
+                      Text(
+                        'EXAMPLE · 예문',
+                        style: theme.labelMono.copyWith(fontSize: 9, color: colors.ink3),
                       ),
                       const SizedBox(height: 6),
-                      Text(
-                        '"${word.exampleSentence}"',
-                        style: theme.meaningSerif.copyWith(
-                          fontSize: 14,
-                          color: colors.ink2,
-                          height: 1.4,
-                        ),
+                      CabinetExampleSentences(
+                        exampleText: word.exampleSentence!,
+                        colors: colors,
+                        theme: theme,
+                        fontSize: 14,
                       ),
                     ],
                   ),

@@ -261,3 +261,112 @@ class _CabinetPronounceButtonsState
     );
   }
 }
+
+/// 여러 줄 또는 여러 문장으로 구성된 예문을 한 문장씩 분리한다.
+List<String> splitExampleSentences(String raw) {
+  final trimmed = raw.trim();
+  if (trimmed.isEmpty) return const [];
+
+  final lines = trimmed
+      .split(RegExp(r'\r?\n'))
+      .map((line) => line.trim())
+      .where((line) => line.isNotEmpty);
+
+  final sentences = <String>[];
+  final sentenceBoundary = RegExp(r'(?<=[.!?]["\x27”’\)]?)\s+(?=[A-Z0-9"\x27“‘\(])');
+
+  for (final line in lines) {
+    final parts = line
+        .split(sentenceBoundary)
+        .map((p) => p.trim())
+        .where((p) => p.isNotEmpty);
+    sentences.addAll(parts);
+  }
+
+  return sentences;
+}
+
+/// 예문을 한 문장씩 나누어 표시하고, 문장별 여성/남성 발음 버튼을 제공하는 공용 위젯
+class CabinetExampleSentences extends StatelessWidget {
+  final String exampleText;
+  final CabinetColors colors;
+  final CabinetTheme theme;
+  final double fontSize;
+  final bool centered;
+
+  const CabinetExampleSentences({
+    super.key,
+    required this.exampleText,
+    required this.colors,
+    required this.theme,
+    this.fontSize = 15,
+    this.centered = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final sentences = splitExampleSentences(exampleText);
+    if (sentences.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment:
+          centered ? CrossAxisAlignment.center : CrossAxisAlignment.start,
+      children: [
+        for (int i = 0; i < sentences.length; i++) ...[
+          if (i > 0)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Divider(
+                height: 1,
+                thickness: 1,
+                color: colors.inkLine.withValues(alpha: 0.7),
+              ),
+            ),
+          _buildSentenceItem(sentences[i], index: i, total: sentences.length),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildSentenceItem(String sentence, {required int index, required int total}) {
+    final textWidget = Text(
+      total > 1 ? '${index + 1}. $sentence' : '"$sentence"',
+      textAlign: centered ? TextAlign.center : TextAlign.start,
+      style: theme.meaningSerif.copyWith(
+        fontSize: fontSize,
+        color: colors.ink2,
+        height: 1.45,
+      ),
+    );
+
+    final buttonsWidget = CabinetPronounceButtons(
+      word: sentence,
+      colors: colors,
+      theme: theme,
+      compact: true,
+    );
+
+    if (centered) {
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          textWidget,
+          const SizedBox(height: 6),
+          buttonsWidget,
+        ],
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        textWidget,
+        const SizedBox(height: 6),
+        Align(
+          alignment: Alignment.centerRight,
+          child: buttonsWidget,
+        ),
+      ],
+    );
+  }
+}

@@ -48,55 +48,63 @@ class TtsVoiceResolver {
     'bubbles', 'cellos', 'deranged', 'good news', 'hysterical',
     'pipe organ', 'trinoids', 'whisper', 'zarvox', 'junior',
     'princess', 'espeak',
+    // macOS Eloquence 구형 기계음 계열 차단
+    'eddy', 'reed', 'rocko', 'grandpa', 'shelley', 'sandy', 'grandma',
+    'flo', 'kathy',
   ];
 
   static const List<String> femaleExclusiveKeywords = [
     'female', 'woman', 'girl', 'samantha', 'karen', 'victoria', 'zira',
-    'jenny', 'aria', 'flo', 'ava', 'shelley', 'sandy', 'grandma',
-    'kathy', 'fiona', 'moira', 'tessa', 'veena', 'yuri', 'catherine',
-    'allison', 'susan', 'kate', 'serena', 'google us english',
+    'jenny', 'aria', 'ava', 'emma', 'ana', 'michelle', 'monica',
+    'allison', 'susan', 'kate', 'serena', 'moira', 'tessa', 'fiona',
+    'veena', 'yuri', 'catherine', 'nicky', 'google us english',
     'en-us-x-sfg', 'en-us-x-tpf', 'en-us-x-iob', 'en-us-x-iol',
     'en-gb-x-gba', 'en-gb-x-gbc', 'en-au-x-aua', 'en-au-x-auc',
   ];
 
   static const List<String> maleKeywords = [
-    'google uk english male',
-    'guy online (natural)',
-    'christopher online (natural)',
-    'ryan online (natural)',
+    // 1. 미국식(en-US) 최고급 Neural / Natural / Multilingual 음성 우선
+    'andrewmultilingual online (natural)',
+    'brianmultilingual online (natural)',
     'andrew online (natural)',
     'brian online (natural)',
+    'guy online (natural)',
+    'christopher online (natural)',
     'eric online (natural)',
     'roger online (natural)',
     'steffan online (natural)',
+    'davis online (natural)',
+    'jason online (natural)',
+    'tony online (natural)',
+    'andrew neural',
+    'brian neural',
     'guy neural',
     'christopher neural',
     'en-us-x-iom',
     'en-us-x-tpd',
+    'alex',
+    'aaron',
+    'evan',
+    'nathan',
+    'tom',
+    'david',
+    'mark',
+    // 2. 그 외 고품질 영어 남성 음성 (en-GB / en-AU 등 폴백)
+    'google uk english male',
+    'ryan online (natural)',
     'en-gb-x-gbd',
     'en-gb-x-rjs',
     'en-au-x-aud',
     'en-au-x-aub',
-    'nathan',
-    'evan',
-    'tom',
-    'oliver',
     'daniel',
-    'alex',
-    'aaron',
+    'oliver',
     'arthur',
+    'george',
+    'james',
+    'richard',
     'gordon',
     'lee',
     'rishi',
-    'eddy',
-    'reed',
-    'rocko',
-    'grandpa',
-    'george',
-    'david',
-    'mark',
-    'james',
-    'richard',
     'standard-b',
     'standard-d',
     'wavenet-b',
@@ -107,31 +115,44 @@ class TtsVoiceResolver {
   ];
 
   static const List<String> femaleKeywords = [
-    'google us english',
+    // 1. 미국식(en-US) 최고급 Neural / Natural / Multilingual 음성 우선
+    'avamultilingual online (natural)',
+    'emmamultilingual online (natural)',
     'jenny online (natural)',
     'aria online (natural)',
-    'google uk english female',
+    'ava online (natural)',
+    'emma online (natural)',
+    'ana online (natural)',
+    'michelle online (natural)',
+    'monica online (natural)',
+    'google us english',
     'jenny neural',
     'aria neural',
+    'ava neural',
+    'emma neural',
     'en-us-x-sfg',
     'en-us-x-tpf',
     'en-us-x-iob',
     'en-us-x-iol',
+    'samantha',
+    'ava',
+    'allison',
+    'susan',
+    'victoria',
+    'zira',
+    'nicky',
+    // 2. 그 외 고품질 영어 여성 음성 (en-GB / en-AU 등 폴백)
+    'google uk english female',
     'en-gb-x-gba',
     'en-gb-x-gbc',
     'en-au-x-aua',
     'en-au-x-auc',
-    'samantha',
-    'ava',
     'karen',
-    'victoria',
-    'zira',
-    'allison',
-    'susan',
     'kate',
     'moira',
     'tessa',
     'fiona',
+    'serena',
     'standard-a',
     'standard-c',
     'standard-e',
@@ -143,6 +164,29 @@ class TtsVoiceResolver {
 
   static final RegExp _maleWordRegex = RegExp(r'\bmale\b');
 
+  static bool _isUsEnglish(String localeOrLang) {
+    final norm = localeOrLang.toLowerCase().replaceAll('_', '-');
+    return norm == 'en-us' || norm.startsWith('en-us-');
+  }
+
+  static int _naturalQualityScore(TtsVoiceCandidate v) {
+    final name = v.name.toLowerCase();
+    int score = 0;
+    if (name.contains('multilingual') || name.contains('natural') || name.contains('neural')) {
+      score += 40;
+    }
+    if (name.contains('online') || name.contains('enhanced') || name.contains('premium')) {
+      score += 30;
+    }
+    if (name.contains('google') || name.contains('siri')) {
+      score += 20;
+    }
+    if (_isUsEnglish(v.localeOrLang)) {
+      score += 10;
+    }
+    return score;
+  }
+
   static bool _isFemaleVoice(TtsVoiceCandidate v) {
     final name = v.name.toLowerCase();
     final g = v.gender.toLowerCase();
@@ -150,6 +194,7 @@ class TtsVoiceResolver {
   }
 
   /// 후보 목록에서 (maleIndex, femaleIndex)를 반환한다. 찾지 못하면 null.
+  /// 자연스러운 Neural/Natural/Enhanced 음성과 미국식(en-US) 발음을 최우선으로 선택한다.
   static ({int? maleIndex, int? femaleIndex}) resolve(List<TtsVoiceCandidate> voices) {
     if (voices.isEmpty) return (maleIndex: null, femaleIndex: null);
 
@@ -167,53 +212,50 @@ class TtsVoiceResolver {
     final englishIndices = candidateIndices
         .where((i) => voices[i].localeOrLang.toLowerCase().startsWith('en'))
         .toList();
-    final pool = englishIndices.isNotEmpty ? englishIndices : candidateIndices;
+    final pool = List<int>.from(englishIndices.isNotEmpty ? englishIndices : candidateIndices);
 
-    int? foundMale;
-    for (final i in pool) {
-      if (voices[i].gender.toLowerCase() == 'male' && !_isFemaleVoice(voices[i])) {
-        foundMale = i;
-        break;
+    // 고품질 자연음 + 미국식(en-US) 순으로 정렬
+    pool.sort((a, b) => _naturalQualityScore(voices[b]).compareTo(_naturalQualityScore(voices[a])));
+
+    final usPool = pool.where((i) => _isUsEnglish(voices[i].localeOrLang)).toList();
+
+    int? findMaleIn(List<int> targetPool) {
+      for (final i in targetPool) {
+        if (voices[i].gender.toLowerCase() == 'male' && !_isFemaleVoice(voices[i])) {
+          return i;
+        }
       }
-    }
-
-    if (foundMale == null) {
       for (final kw in maleKeywords) {
-        for (final i in pool) {
+        for (final i in targetPool) {
           final v = voices[i];
           if (_isFemaleVoice(v)) continue;
           final name = v.name.toLowerCase();
           final matched = (kw == 'male') ? _maleWordRegex.hasMatch(name) : name.contains(kw);
-          if (matched) {
-            foundMale = i;
-            break;
-          }
+          if (matched) return i;
         }
-        if (foundMale != null) break;
       }
+      return null;
     }
 
-    int? foundFemale;
-    for (final i in pool) {
-      if (voices[i].gender.toLowerCase() == 'female') {
-        foundFemale = i;
-        break;
+    int? findFemaleIn(List<int> targetPool) {
+      for (final i in targetPool) {
+        if (voices[i].gender.toLowerCase() == 'female') {
+          return i;
+        }
       }
-    }
-
-    if (foundFemale == null) {
       for (final kw in femaleKeywords) {
-        for (final i in pool) {
+        for (final i in targetPool) {
           final v = voices[i];
           if (v.gender.toLowerCase() == 'male') continue;
-          if (v.name.toLowerCase().contains(kw)) {
-            foundFemale = i;
-            break;
-          }
+          if (v.name.toLowerCase().contains(kw)) return i;
         }
-        if (foundFemale != null) break;
       }
+      return null;
     }
+
+    // 미국식(en-US)에서 먼저 탐색하고, 없을 때만 전체 영어 풀로 폴백
+    int? foundMale = findMaleIn(usPool) ?? findMaleIn(pool);
+    int? foundFemale = findFemaleIn(usPool) ?? findFemaleIn(pool);
 
     if (foundFemale == null && pool.isNotEmpty) {
       foundFemale = pool.firstWhere(
@@ -223,10 +265,18 @@ class TtsVoiceResolver {
     }
 
     if (foundMale == null && pool.isNotEmpty) {
-      for (final i in pool) {
+      for (final i in usPool) {
         if (i != foundFemale && !_isFemaleVoice(voices[i])) {
           foundMale = i;
           break;
+        }
+      }
+      if (foundMale == null) {
+        for (final i in pool) {
+          if (i != foundFemale && !_isFemaleVoice(voices[i])) {
+            foundMale = i;
+            break;
+          }
         }
       }
     }

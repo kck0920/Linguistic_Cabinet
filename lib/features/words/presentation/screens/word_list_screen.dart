@@ -459,35 +459,22 @@ class WordListScreen extends ConsumerWidget {
                               borderRadius: BorderRadius.circular(4),
                               border: Border.all(color: colors.inkLine),
                             ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Text(
-                                      'EXAMPLE SENTENCE · 예문',
-                                      style: theme.labelMono.copyWith(fontSize: 10, color: colors.ink3),
-                                    ),
-                                    CabinetPronounceButtons(
-                                      word: word.exampleSentence!,
-                                      colors: colors,
-                                      theme: theme,
-                                      compact: true,
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  '"${word.exampleSentence}"',
-                                  style: theme.meaningSerif.copyWith(
-                                    fontSize: 16,
-                                    color: colors.ink2,
-                                    height: 1.45,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'EXAMPLE SENTENCE · 예문',
+                                    style: theme.labelMono.copyWith(fontSize: 10, color: colors.ink3),
                                   ),
-                                ),
-                              ],
-                            ),
+                                  const SizedBox(height: 8),
+                                  CabinetExampleSentences(
+                                    exampleText: word.exampleSentence!,
+                                    colors: colors,
+                                    theme: theme,
+                                    fontSize: 16,
+                                  ),
+                                ],
+                              ),
                           ),
                         ],
 
