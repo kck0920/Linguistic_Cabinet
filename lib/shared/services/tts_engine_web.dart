@@ -80,104 +80,13 @@ class TtsEngineWeb implements BaseTtsEngine {
     debugPrint('TTS Web Resolved Voices: Male=${_cachedMaleVoice?.name} (${_cachedMaleVoice?.lang}), Female=${_cachedFemaleVoice?.name} (${_cachedFemaleVoice?.lang})');
   }
 
-  /// 고품질 원어민 오디오 스트림 URL 목록 (1순위: Polly 서버리스 스트림, 2순위: Google/Youdao 원음 스트림)
-  List<String> _getAudioStreamUrls(String text, TtsVoiceGender gender) {
-    final clean = text.trim();
-    if (clean.isEmpty) return const [];
-
-    final encoded = Uri.encodeComponent(clean);
-    final speaker = (gender == TtsVoiceGender.male) ? 'Matthew' : 'Joanna';
-    final urls = <String>[
-      // 1순위: Amazon Polly 미국인 표준 성우 (남성: Matthew, 여성: Joanna)
-      'https://api.streamelements.com/kappa/v2/speech?voice=$speaker&text=$encoded',
-      // 2순위: Vercel Serverless Function 프록시
-      '/api/tts?text=$encoded&gender=${gender.name}',
-    ];
-
-    // 3순위 (오프라인 / 폴백): 여성 음성만 Google Translate TTS 지원
-    if (gender == TtsVoiceGender.female) {
-      urls.add('https://translate.google.com/translate_tts?ie=UTF-8&tl=en-US&client=tw-ob&q=$encoded');
-    }
-
-    return urls;
-  }
-
-  /// 원어민 오디오 스트림 재생 시도 (순차적 폴백)
-  Future<bool> _tryPlayAudioStream(String text, TtsVoiceGender gender) async {
-    final urls = _getAudioStreamUrls(text, gender);
-    if (urls.isEmpty) return false;
-
-    for (final url in urls) {
-      final success = await _playSingleAudioUrl(url);
-      if (success) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  Future<bool> _playSingleAudioUrl(String url) async {
-    _stopAll(notify: false);
-
-    final completer = Completer<bool>();
-    try {
-      final audio = web.HTMLAudioElement();
-      audio.src = url;
-      _currentAudio = audio;
-
-      void cleanup() {
-        _audioTimeoutTimer?.cancel();
-        _audioTimeoutTimer = null;
-        if (_currentAudio == audio) {
-          _currentAudio = null;
-        }
-      }
-
-      audio.onplay = ((web.Event e) {
-        // 재생이 정상 시작되었으므로 타임아웃 타이머 취소 (긴 문장 완독 보장)
-        _audioTimeoutTimer?.cancel();
-        _audioTimeoutTimer = null;
-        _onStart?.call();
-      }).toJS;
-
-      audio.onended = ((web.Event e) {
-        cleanup();
-        _onComplete?.call();
-        if (!completer.isCompleted) completer.complete(true);
-      }).toJS;
-
-      audio.onerror = ((web.Event e) {
-        cleanup();
-        if (!completer.isCompleted) completer.complete(false);
-      }).toJS;
-
-      // 4.5초 내에 재생이 시작되지 않으면 다음 소스로 Fallback
-      _audioTimeoutTimer = Timer(const Duration(milliseconds: 4500), () {
-        if (!completer.isCompleted) {
-          cleanup();
-          completer.complete(false);
-        }
-      });
-
-      final playPromise = audio.play();
-      playPromise.toDart.catchError((_) {
-        cleanup();
-        if (!completer.isCompleted) completer.complete(false);
-        return null;
-      });
-
-      return await completer.future;
-    } catch (_) {
-      _stopCurrentAudio();
-      return false;
-    }
-  }
-
-  /// 브라우저 내장 Web Speech API Fallback
+  /// 브라우저 내장 Web Speech API 재생
   Future<void> _speakViaWebSpeech(String clean, TtsVoiceGender gender) async {
     try {
       final synth = web.window.speechSynthesis;
-      await _ensureVoicesLoaded();
+      if (!_voicesLoaded) {
+        await _ensureVoicesLoaded();
+      }
 
       synth.cancel();
 
@@ -227,13 +136,8 @@ class TtsEngineWeb implements BaseTtsEngine {
     final clean = text.trim();
     if (clean.isEmpty) return;
 
-    // 1순위: 미국인 표준 원어민 오디오 스트림 (남성: Matthew, 여성: Joanna)
-    final audioSuccess = await _tryPlayAudioStream(clean, gender);
-    if (audioSuccess) {
-      return;
-    }
-
-    // 2순위: 오디오 스트림 실패(오프라인 등) 시 Web Speech API 폴백
+    // 외부 비공식 TTS 스트림의 401 차단 및 비동기 대기 중 user-gesture 만료로 인한
+    // 무음 현상을 방지하기 위해 브라우저 내장 Web Speech API를 즉시 호출한다.
     await _speakViaWebSpeech(clean, gender);
   }
 
