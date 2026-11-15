@@ -97,12 +97,9 @@ class TtsEngineIo implements BaseTtsEngine {
           'name': targetVoice['name']!,
           'locale': targetVoice['locale'] ?? targetVoice['lang'] ?? 'en-US',
         });
-        // 전용 성별 보이스를 찾았을 때는 자연스러운 원음 피치(1.0) 적용
-        await _tts.setPitch(1.0);
-      } else {
-        // 해당 성별의 전용 보이스가 없을 때만 피치로 남/여 구분
-        await _tts.setPitch(gender == TtsVoiceGender.male ? 0.78 : 1.05);
       }
+      // 피치 변조 시 합성 노이즈가 발생하므로 항상 원음(1.0) 적용
+      await _tts.setPitch(1.0);
       await _tts.speak(clean);
     } catch (e) {
       debugPrint('IO TTS speak error: $e');

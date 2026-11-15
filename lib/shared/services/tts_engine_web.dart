@@ -88,7 +88,9 @@ class TtsEngineWeb implements BaseTtsEngine {
         await _ensureVoicesLoaded();
       }
 
-      synth.cancel();
+      if (synth.speaking || synth.pending) {
+        synth.cancel();
+      }
 
       final utterance = web.SpeechSynthesisUtterance(clean);
       final targetVoice = (gender == TtsVoiceGender.male)
@@ -98,15 +100,13 @@ class TtsEngineWeb implements BaseTtsEngine {
       if (targetVoice != null) {
         utterance.voice = targetVoice;
         utterance.lang = targetVoice.lang;
-        // 전용 성별 보이스를 찾았을 때는 원음 피치(1.0) 사용
-        utterance.pitch = 1.0;
       } else {
         utterance.lang = 'en-US';
-        // 남성 보이스를 찾지 못해 기본(보통 여성) 음성으로 재생될 경우 저음 피치로 구분
-        utterance.pitch = (gender == TtsVoiceGender.male) ? 0.78 : 1.0;
       }
 
-      utterance.rate = 0.97;
+      // 피치/속도 변조 시 합성 노이즈가 발생하므로 원음(1.0) 그대로 재생
+      utterance.pitch = 1.0;
+      utterance.rate = 1.0;
       utterance.volume = 1.0;
 
       utterance.onstart = ((web.Event e) {
